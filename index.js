@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
 const fs = require('fs');
 
@@ -14,7 +13,6 @@ const client = new Client({
 
 const GUILD_ID = '746583847734345741'; 
 
-// Pengaman file settings.json
 if (!fs.existsSync('./settings.json')) {
     fs.writeFileSync('./settings.json', JSON.stringify({}, null, 2));
 }
@@ -40,23 +38,14 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Gunakan 'else if' agar bot hanya memproses satu kondisi saja
-    if (message.content === '!ping') {
-        await message.reply('Pong! 🏓');
-    } 
-    else if (message.content === '!halo') {
-        await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
-    } 
+    if (message.content === '!ping') await message.reply('Pong! 🏓');
+    else if (message.content === '!halo') await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
     else if (message.content === '!flip') {
         const hasil = Math.random() < 0.5 ? 'Kepala (Heads) 🪙' : 'Ekor (Tails) 🪙';
         message.reply(`Hasil koin: **${hasil}**!`);
     }
-    else if (message.content === '!teswelcome') {
-        client.emit('guildMemberAdd', message.member);
-    }
-    else if (message.content === '!tesbye') {
-        client.emit('guildMemberRemove', message.member);
-    }
+    else if (message.content === '!teswelcome') client.emit('guildMemberAdd', message.member);
+    else if (message.content === '!tesbye') client.emit('guildMemberRemove', message.member);
     else if (message.content.startsWith('!welcomeuserset')) {
         const channel = message.mentions.channels.first();
         if (!channel) return message.reply('Tag channel-nya! Contoh: !welcomeuserset #welcome');
@@ -67,7 +56,23 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Event Join/Leave tetap sama...
-// (Pastikan tidak ada duplikasi client.on di tempat lain dalam file ini)
+// Event Join/Leave
+client.on('guildMemberAdd', (m) => {
+    const data = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
+    const channel = m.guild.channels.cache.get(data[m.guild.id]?.welcomeId);
+    if (channel) channel.send(`Welcome imoet ${m}! ✨`);
+});
 
-client.login(process.env.DISCORD_TOKEN);
+client.on('guildMemberRemove', (m) => {
+    const data = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
+    const channel = m.guild.channels.cache.get(data[m.guild.id]?.welcomeId);
+    if (channel) channel.send(`Yah... ${m.user.tag} sudah keluar.`);
+});
+
+// PENGAMAN TOKEN
+const token = process.env.DISCORD_TOKEN;
+if (!token) {
+    console.error("ERROR: Token tidak ditemukan di Variable Railway!");
+    process.exit(1);
+}
+client.login(token);
