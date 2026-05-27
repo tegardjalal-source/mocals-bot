@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 
 const client = new Client({
@@ -117,6 +117,39 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
         setTimeout(() => {
             message.channel.send(`⏰ ${message.author}, pengingatmu: **${pesan}**`);
         }, waktu * 1000);
+    }
+
+    // FITUR USER INFO
+    if (message.content.startsWith('!userinfo')) {
+        const member = message.mentions.members.first() || message.member;
+        message.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setColor(0x00FF00)
+                    .setTitle(`👤 Informasi User: ${member.user.username}`)
+                    .setThumbnail(member.user.displayAvatarURL())
+                    .addFields(
+                        { name: 'ID', value: `\`${member.user.id}\``, inline: true },
+                        { name: 'Bergabung di Server', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true }
+                    )
+            ]
+        });
+    }
+
+    // FITUR SERVER INFO
+    if (message.content === '!serverinfo') {
+        const { guild } = message;
+        message.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setColor(0x0099FF)
+                    .setTitle(`🏠 Info Server: ${guild.name}`)
+                    .addFields(
+                        { name: 'Total Member', value: `\`${guild.memberCount}\``, inline: true },
+                        { name: 'Dibuat pada', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:D>`, inline: true }
+                    )
+            ]
+        });
     }
 
     // Command Tes & Setup
