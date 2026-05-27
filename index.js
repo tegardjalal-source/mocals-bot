@@ -87,7 +87,7 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
         message.reply(`Hasil koin: **${hasil}**!`);
     }
 
-    // FITUR MOCALS DUEL
+   // FITUR MOCALS DUEL (PERBAIKAN)
     if (message.content.startsWith('!duel')) {
         const lawan = message.mentions.members.first();
         
@@ -95,21 +95,22 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
         if (lawan.user.bot) return message.reply('Bot tidak bisa diajak duel! 🤖');
         if (lawan.id === message.author.id) return message.reply('Masa duel sama diri sendiri? Aneh banget! 😅');
 
-        // Simulasi keberuntungan
+        // Mengambil nama yang benar
+        const namaPenantang = message.author.username;
+        const namaLawan = lawan.user.username; // Perbaikan di sini
+        
         const chance = Math.random();
-        const menang = chance < 0.5 ? message.author : lawan;
-        const kalah = menang === message.author ? lawan : message.author;
+        const menang = chance < 0.5 ? namaPenantang : namaLawan;
+        const kalah = menang === namaPenantang ? namaLawan : namaPenantang;
         
-        // Pesan awal
-        message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}** untuk duel maut!`);
+        message.channel.send(`⚔️ **${namaPenantang}** menantang **${namaLawan}** untuk duel maut!`);
         
-        // Jeda waktu supaya berasa tegangnya
         setTimeout(() => {
             message.channel.send(`💥 JLEB! Pertarungan berlangsung sengit...`);
         }, 1500);
 
         setTimeout(() => {
-            message.channel.send(`🏆 Hasilnya: **${menang.username}** berhasil mengalahkan **${kalah.username}** dengan serangan telak!`);
+            message.channel.send(`🏆 Hasilnya: **${menang}** berhasil mengalahkan **${kalah}** dengan serangan telak!`);
         }, 3500);
     }
     
