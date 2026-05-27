@@ -74,4 +74,6 @@ client.on('guildMemberRemove', (m) => {
     if (channel) channel.send(`Yah... ${m.user.tag} sudah keluar.`);
 });
 
+console.log(process.env.DISCORD_TOKEN)
+
 client.login(process.env.DISCORD_TOKEN);
