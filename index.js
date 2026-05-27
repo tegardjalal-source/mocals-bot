@@ -35,13 +35,13 @@ client.once('ready', () => {
     setInterval(updateBotStatus, 60000);
 });
 
-// SINI PUSAT PERINTAH (Hanya satu blok client.on ini)
+// PUSAT PERINTAH (Hanya satu blok client.on ini)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
     let data = fs.existsSync('./settings.json') ? JSON.parse(fs.readFileSync('./settings.json', 'utf8')) : {};
     
-    // --- FITUR MENTION BOT ---
+    // --- 1. FITUR RESPONSE SAAT DI-TAG ---
     if (message.mentions.has(client.user.id)) {
         const responses = [
             "Apaan sih tag-tag? Aku lagi sibuk! 🙄",
@@ -53,7 +53,7 @@ client.on('messageCreate', async (message) => {
         return message.reply(responses[Math.floor(Math.random() * responses.length)]);
     }
 
-    // --- LOGIKA XP/LEVELING ---
+    // --- 2. LOGIKA XP/LEVELING ---
     if (!data.xp) data.xp = {};
     if (!data.xp[message.author.id]) data.xp[message.author.id] = { xp: 0, level: 1 };
     data.xp[message.author.id].xp += Math.floor(Math.random() * 6) + 5;
@@ -65,7 +65,7 @@ client.on('messageCreate', async (message) => {
     }
     fs.writeFileSync('./settings.json', JSON.stringify(data, null, 2));
 
-    // --- COMMANDS ---
+    // --- 3. COMMANDS ---
     if (message.content === '!ping') await message.reply('Pong! 🏓');
     if (message.content === '!halo') await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
     if (message.content === '!rank') {
@@ -77,13 +77,13 @@ client.on('messageCreate', async (message) => {
         const lawan = message.mentions.members.first();
         if (!lawan) return message.reply('Tag dulu siapa yang mau kamu ajak duel!');
         if (lawan.user.bot) return message.reply('Bot tidak bisa diajak duel! 🤖');
-        if (lawan.id === message.author.id) return message.reply('Masa duel sama diri sendiri? 😅');
+        if (lawan.id === message.author.id) return message.reply('Jangan duel sama diri sendiri! 😅');
         
-        message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}** untuk duel maut!`);
+        message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}**!`);
         setTimeout(() => {
             const menang = Math.random() < 0.5 ? message.author.username : lawan.user.username;
             const kalah = menang === message.author.username ? lawan.user.username : message.author.username;
-            message.channel.send(`🏆 Hasilnya: **${menang}** berhasil mengalahkan **${kalah}**!`);
+            message.channel.send(`🏆 Hasilnya: **${menang}** menang!`);
         }, 2000);
     }
 
@@ -95,7 +95,15 @@ client.on('messageCreate', async (message) => {
         targetChannel.send(pesan).then(() => message.reply('✅ Terkirim!'));
     }
 
-    // (Sisa fitur lainnya seperti !8ball, !userinfo, !serverinfo taruh di bawah sini...)
+    if (message.content.startsWith('!userinfo')) {
+        const member = message.mentions.members.first() || message.member;
+        const roles = member.roles.cache.filter(r => r.id !== message.guild.id).map(r => `<@&${r.id}>`).join(', ') || 'Tidak ada';
+        const embed = new EmbedBuilder()
+            .setColor(0x00FF00)
+            .setTitle(`👤 Info: ${member.user.username}`)
+            .addFields({ name: 'ID', value: `\`${member.user.id}\`` }, { name: 'Roles', value: roles });
+        message.reply({ embeds: [embed] });
+    }
 });
 
 client.on('guildMemberAdd', (m) => {
