@@ -119,9 +119,18 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
         }, waktu * 1000);
     }
 
-    // FITUR USER INFO
+   // FITUR USER INFO (DENGAN ROLE & JUMLAH PESAN)
     if (message.content.startsWith('!userinfo')) {
         const member = message.mentions.members.first() || message.member;
+        
+        // Ambil data pesan
+        const messageCount = data.messages?.[member.id] || 0;
+        
+        const roles = member.roles.cache
+            .filter(r => r.id !== message.guild.id)
+            .map(r => `<@&${r.id}>`)
+            .join(', ') || 'Tidak ada role';
+
         message.reply({
             embeds: [
                 new EmbedBuilder()
@@ -130,7 +139,9 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
                     .setThumbnail(member.user.displayAvatarURL())
                     .addFields(
                         { name: 'ID', value: `\`${member.user.id}\``, inline: true },
-                        { name: 'Bergabung di Server', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true }
+                        { name: 'Bergabung di Server', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true },
+                        { name: 'Total Pesan', value: `\`${messageCount}\``, inline: true }, // Menambahkan statistik pesan
+                        { name: 'Roles', value: roles, inline: false }
                     )
             ]
         });
