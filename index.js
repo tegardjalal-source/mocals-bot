@@ -14,23 +14,6 @@ const client = new Client({
 
 const GUILD_ID = '746583847734345741';
 
-client.on('messageCreate', async (message) => {
-    // 1. Abaikan kalau bot yang ngomong sendiri
-    if (message.author.bot) return;
-
-    // 2. FITUR RESPONSE SAAT DI-TAG (Taruh di sini paling atas)
-    if (message.mentions.has(client.user.id)) {
-        const responses = [
-            "Apaan sih tag-tag? Aku lagi sibuk! 🙄",
-            "Ada apa panggil-panggil? Lagi mau curhat ya? 💅",
-            "Iya, iya, aku denger kok. Gak usah di-tag terus bisa nggak? 😒",
-            "Eh, ada aku ya? Sori, tadi lagi ngelamun. Kenapa?",
-            "Tumben banget nge-tag. Mau minta apa nih? 🤨"
-        ];
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-        return message.reply(randomResponse); // Pake return biar gak lanjut ke bawah
-    }
-
 // Fungsi Update Status Bot
 async function updateBotStatus() {
     try {
@@ -134,6 +117,24 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
 
         message.reply(`✅ Pesan berhasil dikirim ke ${targetChannel}!`);
     }
+
+    client.on('messageCreate', async (message) => {
+    // 1. Abaikan kalau bot yang ngomong sendiri
+    if (message.author.bot) return;
+
+    // 2. FITUR RESPONSE SAAT DI-TAG (Taruh di sini paling atas)
+    if (message.mentions.has(client.user.id)) {
+        const responses = [
+            "Apaan sih tag-tag? Aku lagi sibuk! 🙄",
+            "Ada apa panggil-panggil? Lagi mau curhat ya? 💅",
+            "Iya, iya, aku denger kok. Gak usah di-tag terus bisa nggak? 😒",
+            "Eh, ada aku ya? Sori, tadi lagi ngelamun. Kenapa?",
+            "Tumben banget nge-tag. Mau minta apa nih? 🤨"
+        ];
+        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+        return message.reply(randomResponse); // Pake return biar gak lanjut ke bawah
+    }
+
     
    // FITUR MOCALS DUEL (PERBAIKAN)
     if (message.content.startsWith('!duel')) {
