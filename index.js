@@ -87,6 +87,32 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
         message.reply(`Hasil koin: **${hasil}**!`);
     }
 
+    // FITUR MOCALS DUEL
+    if (message.content.startsWith('!duel')) {
+        const lawan = message.mentions.members.first();
+        
+        if (!lawan) return message.reply('Tag dulu siapa yang mau kamu ajak duel! Contoh: `!duel @user`');
+        if (lawan.user.bot) return message.reply('Bot tidak bisa diajak duel! 🤖');
+        if (lawan.id === message.author.id) return message.reply('Masa duel sama diri sendiri? Aneh banget! 😅');
+
+        // Simulasi keberuntungan
+        const chance = Math.random();
+        const menang = chance < 0.5 ? message.author : lawan;
+        const kalah = menang === message.author ? lawan : message.author;
+        
+        // Pesan awal
+        message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}** untuk duel maut!`);
+        
+        // Jeda waktu supaya berasa tegangnya
+        setTimeout(() => {
+            message.channel.send(`💥 JLEB! Pertarungan berlangsung sengit...`);
+        }, 1500);
+
+        setTimeout(() => {
+            message.channel.send(`🏆 Hasilnya: **${menang.username}** berhasil mengalahkan **${kalah.username}** dengan serangan telak!`);
+        }, 3500);
+    }
+    
     // FITUR 8-BALL
     if (message.content.startsWith('!8ball')) {
         const pertanyaan = message.content.slice(7);
