@@ -81,10 +81,42 @@ Aku berkomitmen untuk terus berkembang setiap harinya. Seiring berjalannya waktu
 
 Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima kasih banyak sudah menerimaku di sini. Mari kita tumbuh bersama dan jadikan server ini semakin keren! 🚀`);
 
-    // Minigame Flip (Tetap ada)
+    // Minigame Flip
     if (message.content === '!flip') {
         const hasil = Math.random() < 0.5 ? 'Kepala (Heads) 🪙' : 'Ekor (Tails) 🪙';
         message.reply(`Hasil koin: **${hasil}**!`);
+    }
+
+    // FITUR 8-BALL
+    if (message.content.startsWith('!8ball')) {
+        const pertanyaan = message.content.slice(7);
+        if (!pertanyaan) return message.reply('Tanya sesuatu dong! Contoh: !8ball apakah aku keren?');
+        const jawaban = [
+            'Ya, tentu saja! ✨',
+            'Sepertinya tidak...',
+            'Mungkin suatu hari nanti.',
+            'Jangan berharap banyak.',
+            'Tanya lagi nanti ya.',
+            'Tentu saja, itu pasti terjadi! 🍀',
+            'Tidak mungkin itu terjadi.'
+        ];
+        const hasil = jawaban[Math.floor(Math.random() * jawaban.length)];
+        message.reply(`🎱 **Pertanyaan**: ${pertanyaan}\n**Jawaban**: ${hasil}`);
+    }
+
+    // FITUR REMINDER 
+    if (message.content.startsWith('!remind')) {
+        const args = message.content.split(' ');
+        const waktu = parseInt(args[1]); // dalam detik
+        const pesan = args.slice(2).join(' ');
+
+        if (!waktu || !pesan) return message.reply('Format salah! Contoh: !remind 10 Belajar coding');
+        
+        message.reply(`✅ Oke, aku akan mengingatkanmu dalam ${waktu} detik: "${pesan}"`);
+        
+        setTimeout(() => {
+            message.channel.send(`⏰ ${message.author}, pengingatmu: **${pesan}**`);
+        }, waktu * 1000);
     }
 
     // Command Tes & Setup
