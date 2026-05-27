@@ -12,7 +12,7 @@ const client = new Client({
     ]
 });
 
-const GUILD_ID = '746583847734345741'; 
+const GUILD_ID = '746583847734345741';
 
 // Fungsi Update Status Bot
 async function updateBotStatus() {
@@ -23,7 +23,7 @@ async function updateBotStatus() {
         const onlineCount = members.filter(m => !m.user.bot && m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)).size;
         const totalHumans = members.filter(m => !m.user.bot).size;
         const offlineCount = totalHumans - onlineCount;
-        client.user.setActivity(`🍀 𝕺𝖓𝖑𝖎𝖓𝖊: ${onlineCount}  |  🍁 𝕺𝖋𝖋𝖑𝖎𝖓𝖊: ${offlineCount}`, { type: ActivityType.Custom });
+        client.user.setActivity(`🍀 𝕺𝖓𝖑𝖎𝖓𝖊: ${onlineCount} | 🍁 𝕺𝖋𝖋𝖑𝖎𝖓𝖊: ${offlineCount}`, { type: ActivityType.Custom });
     } catch (e) { console.error('Gagal update status:', e); }
 }
 
@@ -44,7 +44,7 @@ client.on('messageCreate', async (message) => {
 
     // Tambah XP acak antara 5-10
     data.xp[message.author.id].xp += Math.floor(Math.random() * 6) + 5;
-    
+
     // Level Up setiap 100 XP
     let neededXP = data.xp[message.author.id].level * 100;
     if (data.xp[message.author.id].xp >= neededXP) {
@@ -57,7 +57,7 @@ client.on('messageCreate', async (message) => {
     // Command Dasar
     if (message.content === '!ping') await message.reply('Pong! 🏓');
     if (message.content === '!halo') await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
-    
+
     // Command Rank
     if (message.content === '!rank') {
         const userXP = data.xp[message.author.id] || { xp: 0, level: 1 };
@@ -106,6 +106,5 @@ client.on('guildMemberRemove', (m) => {
     if (channel) channel.send(`Yah... ${m.user.tag} sudah keluar.`);
 });
 
-console.log(process.env.DISCORD_TOKEN)
-
+console.log(process.env.DISCORD_TOKEN);
 client.login(process.env.DISCORD_TOKEN);
