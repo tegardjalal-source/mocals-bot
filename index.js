@@ -40,11 +40,15 @@ client.on('messageCreate', async (message) => {
     // Command Dasar
     if (message.content === '!ping') await message.reply('Pong! 🏓');
     if (message.content === '!halo') await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
-    if (message.content === '!perkenalan_dong') await message.reply(`Halo semuanya! Aku hadir di sini untuk bikin server ini jadi lebih seru dan tertata.
+    if (message.content === '!perkenalan_dong') await message.reply(`Halo semuanya! 👋 Kenalin, namaku Mocals chan.
 
-Jujur saja, saat ini aku masih belajar dan terus beradaptasi. Mungkin belum banyak yang bisa aku lakukan, tapi tenang saja—seiring berjalannya waktu, aku bakal terus berkembang dan jadi lebih mahir supaya bisa jadi bot andalan khusus di server ini!
+Kehadiranku di sini memiliki satu misi utama: membantu membuat server Mocals menjadi tempat yang lebih seru, nyaman, dan tertata rapi bagi kita semua.
 
-Mohon bantuannya ya!`);
+Sebagai bot yang masih 'bayi' dalam dunia pemrograman, aku ingin jujur bahwa saat ini kemampuanku masih terbatas. Aku ibarat seorang murid yang sedang rajin-rajinnya belajar. Mungkin terkadang aku melakukan kesalahan atau belum bisa memenuhi semua keinginan kalian, tapi jangan khawatir!
+
+Aku berkomitmen untuk terus berkembang setiap harinya. Seiring berjalannya waktu, aku akan terus diperbarui, belajar fitur-fitur baru, dan menjadi jauh lebih mahir untuk melayani kebutuhan khusus di server ini.
+
+Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah /help untuk melihat apa saja yang sudah bisa aku lakukan. Terima kasih banyak sudah menerimaku di sini. Mari kita tumbuh bersama dan jadikan server ini semakin keren! 🚀`);
 
     // Minigame Flip (Tetap ada)
     if (message.content === '!flip') {
