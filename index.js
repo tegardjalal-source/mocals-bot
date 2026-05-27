@@ -40,6 +40,11 @@ client.on('messageCreate', async (message) => {
     // Command Dasar
     if (message.content === '!ping') await message.reply('Pong! 🏓');
     if (message.content === '!halo') await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
+    if (message.content === '!perkenalan_dong') await message.reply(`Halo semuanya! Aku hadir di sini untuk bikin server ini jadi lebih seru dan tertata.
+
+Jujur saja, saat ini aku masih belajar dan terus beradaptasi. Mungkin belum banyak yang bisa aku lakukan, tapi tenang saja—seiring berjalannya waktu, aku bakal terus berkembang dan jadi lebih mahir supaya bisa jadi bot andalan khusus di server ini!
+
+Mohon bantuannya ya!`);
 
     // Minigame Flip (Tetap ada)
     if (message.content === '!flip') {
