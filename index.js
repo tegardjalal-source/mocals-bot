@@ -44,11 +44,11 @@ client.on('messageCreate', async (message) => {
 
 Kehadiranku di sini memiliki satu misi utama: membantu membuat server Mocals menjadi tempat yang lebih seru, nyaman, dan tertata rapi bagi kita semua.
 
-Sebagai bot yang masih 'bayi' dalam dunia pemrograman, aku ingin jujur bahwa saat ini kemampuanku masih terbatas. Aku ibarat seorang murid yang sedang rajin-rajinnya belajar. Mungkin terkadang aku melakukan kesalahan atau belum bisa memenuhi semua keinginan kalian, tapi jangan khawatir!
+Sebagai bot yang masih bayi dalam dunia bot, aku ingin jujur bahwa saat ini kemampuanku masih terbatas. Aku ibarat seorang murid yang sedang rajin-rajinnya belajar. Mungkin terkadang aku melakukan kesalahan atau belum bisa memenuhi semua keinginan kalian, tapi jangan khawatir!
 
 Aku berkomitmen untuk terus berkembang setiap harinya. Seiring berjalannya waktu, aku akan terus diperbarui, belajar fitur-fitur baru, dan menjadi jauh lebih mahir untuk melayani kebutuhan khusus di server ini.
 
-Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah /help untuk melihat apa saja yang sudah bisa aku lakukan. Terima kasih banyak sudah menerimaku di sini. Mari kita tumbuh bersama dan jadikan server ini semakin keren! 🚀`);
+Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima kasih banyak sudah menerimaku di sini. Mari kita tumbuh bersama dan jadikan server ini semakin keren! 🚀`);
 
     // Minigame Flip (Tetap ada)
     if (message.content === '!flip') {
