@@ -37,9 +37,33 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
+    // --- LOGIKA XP/LEVELING ---
+    let data = fs.existsSync('./settings.json') ? JSON.parse(fs.readFileSync('./settings.json', 'utf8')) : {};
+    if (!data.xp) data.xp = {};
+    if (!data.xp[message.author.id]) data.xp[message.author.id] = { xp: 0, level: 1 };
+
+    // Tambah XP acak antara 5-10
+    data.xp[message.author.id].xp += Math.floor(Math.random() * 6) + 5;
+    
+    // Level Up setiap 100 XP
+    let neededXP = data.xp[message.author.id].level * 100;
+    if (data.xp[message.author.id].xp >= neededXP) {
+        data.xp[message.author.id].level += 1;
+        data.xp[message.author.id].xp = 0;
+        message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${data.xp[message.author.id].level}**! ✨`);
+    }
+    fs.writeFileSync('./settings.json', JSON.stringify(data, null, 2));
+
     // Command Dasar
     if (message.content === '!ping') await message.reply('Pong! 🏓');
     if (message.content === '!halo') await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
+    
+    // Command Rank
+    if (message.content === '!rank') {
+        const userXP = data.xp[message.author.id] || { xp: 0, level: 1 };
+        message.reply(`📊 **Status Mocals Bot**\nLevel: **${userXP.level}**\nXP: **${userXP.xp}**`);
+    }
+
     if (message.content === '!perkenalan_dong') await message.reply(`Halo semuanya! 👋 Kenalin, namaku Mocals chan.
 
 Kehadiranku di sini memiliki satu misi utama: membantu membuat server Mocals menjadi tempat yang lebih seru, nyaman, dan tertata rapi bagi kita semua.
@@ -63,7 +87,6 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
     if (message.content.startsWith('!welcomeuserset')) {
         const channel = message.mentions.channels.first();
         if (!channel) return message.reply('Tag channel-nya! Contoh: !welcomeuserset #welcome');
-        let data = fs.existsSync('./settings.json') ? JSON.parse(fs.readFileSync('./settings.json', 'utf8')) : {};
         data[message.guild.id] = { welcomeId: channel.id };
         fs.writeFileSync('./settings.json', JSON.stringify(data, null, 2));
         message.reply(`✅ Channel welcome diatur ke ${channel}`);
