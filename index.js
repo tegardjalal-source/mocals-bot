@@ -87,6 +87,37 @@ Untuk saat ini, kalian bisa mencoba memanggilku dengan perintah !halo. Terima ka
         message.reply(`Hasil koin: **${hasil}**!`);
     }
 
+    // FITUR BROADCAST (Hanya untuk Admin)
+    if (message.content.startsWith('!mocalschanbc')) {
+        // Cek apakah pengirim adalah Admin
+        if (!message.member.permissions.has('Administrator')) {
+            return message.reply('❌ Maaf, hanya Administrator yang bisa menggunakan fitur ini.');
+        }
+
+        const args = message.content.split(' ');
+        const targetChannel = message.mentions.channels.first();
+        const pesan = args.slice(2).join(' '); // Mengambil teks setelah tag channel
+
+        if (!targetChannel) return message.reply('Format salah! Contoh: `!mocalschanbc #channel Halo semuanya!`');
+        if (!pesan) return message.reply('Tulis pesan yang ingin di-broadcast!');
+
+        // Kirim pesan ke channel target
+        targetChannel.send({
+            embeds: [
+                new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle('📢 Pengumuman Penting')
+                    .setDescription(pesan)
+                    .setFooter({ text: `Dikirim oleh: ${message.author.username}` })
+            ]
+        }).catch(err => {
+            console.error(err);
+            message.reply('Gagal mengirim pesan, pastikan bot punya izin akses ke channel tersebut!');
+        });
+
+        message.reply(`✅ Pesan berhasil dikirim ke ${targetChannel}!`);
+    }
+    
    // FITUR MOCALS DUEL (PERBAIKAN)
     if (message.content.startsWith('!duel')) {
         const lawan = message.mentions.members.first();
