@@ -29,6 +29,13 @@ async function updateBotStatus() {
 
 client.once('ready', () => {
     console.log(`${client.user.tag} sudah siap beraksi!`);
+    
+    // Fitur Auto-Backup
+    if (fs.existsSync('./settings.json')) {
+        fs.copyFileSync('./settings.json', './settings.backup.json');
+        console.log('✅ Backup data berhasil dibuat!');
+    }
+    
     updateBotStatus();
     setInterval(updateBotStatus, 60000);
 });
