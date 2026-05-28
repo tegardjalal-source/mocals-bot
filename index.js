@@ -64,6 +64,8 @@ client.on('messageCreate', async (message) => {
     // Command Dasar
     if (message.content === '!ping') await message.reply('Pong! 🏓');
     if (message.content === '!halo') await message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
+    if (message.content === '!gabutnih') await message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
+
 
     // Command Rank
     if (message.content === '!rank') {
