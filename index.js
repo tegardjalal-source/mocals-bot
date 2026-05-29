@@ -334,18 +334,21 @@ client.on('messageCreate', async (message) => {
     }
 
     // !work
-    if (message.content === '!work') {
-        const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
-        const now = Date.now();
-        if (now - user.lastwork < 300000) return message.reply('⏳ Kamu capek! Istirahat dulu 5 menit.');
-        
-        const reward = Math.floor(Math.random() * 500) + 100;
-        user.money += reward;
-        user.lastWork = now;
-        data.economy[message.author.id] = user;
-        await saveData(data);
-        message.reply(`💼 Kamu bekerja dan mendapatkan **${reward}**!`);
+if (message.content === '!work') {
+    // Pastikan pakai lastWork
+    const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
+    const now = Date.now();
+    if (now - user.lastWork < 300000) {
+        return message.reply('⏳ Kamu capek! Istirahat dulu 5 menit.');
     }
+    
+    const reward = Math.floor(Math.random() * 500) + 100;
+    user.money += reward;
+    user.lastWork = now; 
+    data.economy[message.author.id] = user;
+    await saveData(data);
+    message.reply(`💼 Kamu bekerja dan mendapatkan **${reward}**!`);
+}
 
     // !gamble [jumlah]
     if (message.content.startsWith('!gamble')) {
