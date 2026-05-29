@@ -238,6 +238,16 @@ client.on('messageCreate', async (message) => {
         sendUpdateLog(message.guild, message.content.slice(12));
         message.reply('✅ Terkirim!');
     }
+
+    if (message.content.startsWith('!mocalschanbc') && message.member.permissions.has('Administrator')) {
+        const broadcastMsg = message.content.slice(14);
+        client.guilds.cache.forEach(guild => {
+            const channel = guild.channels.cache.find(c => c.type === 0);
+            if (channel) channel.send(`📢 **Broadcast**: ${broadcastMsg}`);
+        });
+        message.reply('✅ Pesan berhasil dibroadcast ke semua server!');
+    }
+    
 });
 
 // Event Join/Leave
