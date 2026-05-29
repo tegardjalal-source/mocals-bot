@@ -255,12 +255,21 @@ client.on('messageCreate', async (message) => {
     }
 
     if (message.content.startsWith('!sethbd')) {
-        const tgl = message.content.split(' ')[1];
-        if (!tgl) return message.reply('Gunakan !sethbd DD-MM');
+        const args = message.content.split(' ');
+        const tgl = args[1];
+
+        // Regex untuk memastikan format DD-MM (contoh: 10-05, 01-12)
+        const dateRegex = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])$/;
+
+        // Pengecekan: kalau tgl kosong ATAU formatnya gak sesuai regex
+        if (!tgl || !dateRegex.test(tgl)) {
+            return message.reply('❌ Format salah! Gunakan format `DD-MM`. Contoh: `!sethbd 10-05`');
+    }
+
         if (!data.hbd) data.hbd = {};
         data.hbd[message.author.id] = tgl;
         
-        await saveData(data); // <--- GANTI JADI INI
+        await saveData(data);
         message.reply('✅ Tanggal ultah disimpan!');
     }
 
