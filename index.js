@@ -39,8 +39,16 @@ async function sendUpdateLog(guild, content) {
     }
 }
 
-client.once('ready', () => {
+client.once('ready', async () => {
     console.log(`${client.user.tag} sudah siap beraksi!`);
+    
+    // Memaksa bot mengambil data member ke cache
+    const guild = client.guilds.cache.get(GUILD_ID);
+    if (guild) {
+        await guild.members.fetch().catch(console.error);
+        console.log("Data member berhasil dimuat ke cache.");
+    }
+
     updateBotStatus();
     setInterval(updateBotStatus, 60000);
 });
@@ -214,10 +222,25 @@ client.on('messageCreate', async (message) => {
 });
 
 // Event Join/Leave
-client.on('guildMemberAdd', (m) => {
-    const data = fs.existsSync('./settings.json') ? JSON.parse(fs.readFileSync('./settings.json', 'utf8')) : {};
-    const ch = m.guild.channels.cache.get(data[m.guild.id]?.welcomeId);
-    if (ch) ch.send(`Welcome imoet ${m}! ✨`);
+client.on('guildMemberAdd', (member) => {
+    // Membaca file dengan aman
+    if (!fs.existsSync('./settings.json')) return;
+    const data = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
+    
+    // Mengambil ID channel berdasarkan struktur data di image_d7e7f7.png
+    const serverData = data[member.guild.id];
+    const welcomeId = serverData ? serverData.welcomeId : null;
+
+    if (welcomeId) {
+        const ch = member.guild.channels.cache.get(welcomeId);
+        if (ch) {
+            ch.send(`Welcome imoet ${member}! ✨`);
+        } else {
+            console.log(`DEBUG: Channel dengan ID ${welcomeId} tidak ditemukan di cache server.`);
+        }
+    } else {
+        console.log(`DEBUG: Data welcomeId tidak ditemukan untuk server ${member.guild.id}.`);
+    }
 });
 
 console.log(process.env.DISCORD_TOKEN);
