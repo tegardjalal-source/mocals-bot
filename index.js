@@ -371,10 +371,23 @@ client.on('messageCreate', async (message) => {
         const args = message.content.split(' ');
         const lawan = message.mentions.members.first();
         const jumlah = parseInt(args[2]);
+        
         if (!lawan || !jumlah) return message.reply('Format: !bit @user [jumlah]');
         if (lawan.id === message.author.id) return message.reply('Gak bisa lawan diri sendiri!');
+        
+        // Cek apakah lawan sudah punya tantangan lain
+        if (activeDuels[lawan.id]) return message.reply('Lawan sedang ditantang orang lain, tunggu ya!');
+
         activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
-        message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} sebesar **${jumlah}**! Ketik \`!confirm\` atau \`!reject\`.`);
+        message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} sebesar **${jumlah}**! Ketik \`!confirm\` atau \`!reject\` dalam 1 menit.`);
+
+        // Fitur pembatalan otomatis (Timeout 60 detik)
+        setTimeout(() => {
+            if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
+                delete activeDuels[lawan.id];
+                message.channel.send(`⏳ Tantangan dari ${message.author} untuk ${lawan} telah dibatalkan karena tidak direspons.`);
+            }
+        }, 60000); // 60.000 ms = 60 detik
     }
 
     // !confirm
