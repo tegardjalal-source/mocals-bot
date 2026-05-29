@@ -98,47 +98,48 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
-// --- EVENT MESSAGE ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
+    // 1. AMBIL DATA DI PALING ATAS
+    let data = await fetchData(); 
+
     // --- COMMAND SETUP WELCOME & LEAVE ---
-if (message.content.startsWith('!setwelcome') && message.member.permissions.has('Administrator')) {
-    const ch = message.mentions.channels.first();
-    if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
-    if (!data.serverSettings) data.serverSettings = {};
-    if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
-    
-    data.serverSettings[message.guild.id].welcomeId = ch.id;
-    await saveData(data);
-    message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
-}
+    if (message.content.startsWith('!setwelcome') && message.member.permissions.has('Administrator')) {
+        const ch = message.mentions.channels.first();
+        if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
+        if (!data.serverSettings) data.serverSettings = {};
+        if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+        
+        data.serverSettings[message.guild.id].welcomeId = ch.id;
+        await saveData(data);
+        return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
+    }
 
-if (message.content.startsWith('!setleave') && message.member.permissions.has('Administrator')) {
-    const ch = message.mentions.channels.first();
-    if (!ch) return message.reply('Tag channel-nya! Contoh: !setleave #leave');
-    if (!data.serverSettings) data.serverSettings = {};
-    if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+    if (message.content.startsWith('!setleave') && message.member.permissions.has('Administrator')) {
+        const ch = message.mentions.channels.first();
+        if (!ch) return message.reply('Tag channel-nya! Contoh: !setleave #leave');
+        if (!data.serverSettings) data.serverSettings = {};
+        if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+        
+        data.serverSettings[message.guild.id].leaveId = ch.id;
+        await saveData(data);
+        return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
+    }
     
-    data.serverSettings[message.guild.id].leaveId = ch.id;
-    await saveData(data);
-    message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
-}
-    
-    // --- COMMAND TEST WELCOME & LEAVE (Admin Only) ---
-if (message.content.startsWith('!testwelcome') && message.member.permissions.has('Administrator')) {
-    client.emit('guildMemberAdd', message.member); // Ini yang memicu event agar bot mengirim pesan welcome
-    message.reply('✅ Simulasi event `guildMemberAdd` telah dijalankan.');
-}
+    // --- COMMAND TEST WELCOME & LEAVE ---
+    if (message.content.startsWith('!testwelcome') && message.member.permissions.has('Administrator')) {
+        client.emit('guildMemberAdd', message.member);
+        return message.reply('✅ Simulasi event `guildMemberAdd` telah dijalankan.');
+    }
 
-if (message.content.startsWith('!testleave') && message.member.permissions.has('Administrator')) {
-    client.emit('guildMemberRemove', message.member); // Ini yang memicu event agar bot mengirim pesan leave
-    message.reply('✅ Simulasi event `guildMemberRemove` telah dijalankan.');
-}
+    if (message.content.startsWith('!testleave') && message.member.permissions.has('Administrator')) {
+        client.emit('guildMemberRemove', message.member);
+        return message.reply('✅ Simulasi event `guildMemberRemove` telah dijalankan.');
+    }
 
-   let data = await fetchData();
-    
-    // Logika XP & Leveling
+    // --- LOGIKA XP & COMMAND LAINNYA ---
+    // Pastikan tidak ada lagi deklarasi 'let data' di bawah sini
     if (!data.messages) data.messages = {};
     data.messages[message.author.id] = (data.messages[message.author.id] || 0) + 1;
     if (!data.xp) data.xp = {};
