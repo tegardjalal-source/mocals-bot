@@ -337,7 +337,7 @@ client.on('messageCreate', async (message) => {
     if (message.content === '!work') {
         const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
         const now = Date.now();
-        if (now - user.lastWork < 3600000) return message.reply('⏳ Kamu capek! Istirahat dulu 1 jam.');
+        if (now - user.lastwork < 300000) return message.reply('⏳ Kamu capek! Istirahat dulu 5 menit.');
         
         const reward = Math.floor(Math.random() * 500) + 100;
         user.money += reward;
