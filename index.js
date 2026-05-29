@@ -279,14 +279,30 @@ client.on('messageCreate', async (message) => {
         message.reply('✅ Terkirim!');
     }
 
-    if (message.content.startsWith('!mocalschanbc') && message.member.permissions.has('Administrator')) {
-        const broadcastMsg = message.content.slice(14);
-        client.guilds.cache.forEach(guild => {
-            const channel = guild.channels.cache.find(c => c.type === 0);
-            if (channel) channel.send(`📢 **Broadcast**: ${broadcastMsg}`);
-        });
-        message.reply('✅ Pesan berhasil dibroadcast ke semua server!');
+  if (message.content.startsWith('!mocalschanbc') && message.member.permissions.has('Administrator')) {
+    // 1. Ambil channel yang ditag
+    const targetChannel = message.mentions.channels.first();
+    
+    // 2. Ambil pesan broadcast (teks setelah tag channel)
+    // slice(14) adalah panjang "!mocalschanbc ", kita ambil sisanya
+    const broadcastMsg = message.content.slice(14).replace(/<#[0-9]+>/, '').trim();
+
+    if (!targetChannel || !broadcastMsg) {
+        return message.reply('Format salah! Contoh: !mocalschanbc #announcement Pesan kamu');
     }
+
+    // 3. Kirim ke channel yang sama ID-nya di semua server
+    let successCount = 0;
+    client.guilds.cache.forEach(guild => {
+        const channel = guild.channels.cache.get(targetChannel.id);
+        if (channel) {
+            channel.send(`📢 **Broadcast**: ${broadcastMsg}`).catch(console.error);
+            successCount++;
+        }
+    });
+
+    message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);
+}
     
 });
 
