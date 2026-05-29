@@ -193,7 +193,7 @@ client.on('messageCreate', async (message) => {
         const args = message.content.split(' ');
         const waktu = parseInt(args[1]);
         const pesan = args.slice(2).join(' ');
-        if (!waktu || !pesan) return message.reply('Contoh: !remind 10 Belajar');
+        if (!waktu || !pesan) return message.reply('Remind buat apatu?? Contoh: !remind 60 belajar (60 itu 1 menit yah)');
         message.reply(`✅ Oke, diingatkan dalam ${waktu} detik.`);
         setTimeout(() => message.channel.send(`⏰ ${message.author}, pengingat: **${pesan}**`), waktu * 1000);
     }
