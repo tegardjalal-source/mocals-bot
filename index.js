@@ -101,6 +101,29 @@ cron.schedule('0 0 * * *', async () => {
 // --- EVENT MESSAGE ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
+
+    // --- COMMAND SETUP WELCOME & LEAVE ---
+if (message.content.startsWith('!setwelcome') && message.member.permissions.has('Administrator')) {
+    const ch = message.mentions.channels.first();
+    if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
+    if (!data.serverSettings) data.serverSettings = {};
+    if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+    
+    data.serverSettings[message.guild.id].welcomeId = ch.id;
+    await saveData(data);
+    message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
+}
+
+if (message.content.startsWith('!setleave') && message.member.permissions.has('Administrator')) {
+    const ch = message.mentions.channels.first();
+    if (!ch) return message.reply('Tag channel-nya! Contoh: !setleave #leave');
+    if (!data.serverSettings) data.serverSettings = {};
+    if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+    
+    data.serverSettings[message.guild.id].leaveId = ch.id;
+    await saveData(data);
+    message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
+}
     
     // --- COMMAND TEST WELCOME & LEAVE (Admin Only) ---
 if (message.content.startsWith('!testwelcome') && message.member.permissions.has('Administrator')) {
@@ -160,6 +183,11 @@ if (message.content.startsWith('!testleave') && message.member.permissions.has('
         message.reply(`🎱 **Pertanyaan**: ${q || 'kosong'}\n**Jawaban**: ${ans[Math.floor(Math.random() * ans.length)]}`);
     }
 
+    if (message.content === '!coinflip') {
+        const hasil = Math.random() < 0.5 ? 'Kepala (Heads)' : 'Ekor (Tails)';
+        message.reply(`🪙 Hasil coin flip adalah: **${hasil}**`);
+    }
+    
     if (message.content.startsWith('!remind')) {
         const args = message.content.split(' ');
         const waktu = parseInt(args[1]);
