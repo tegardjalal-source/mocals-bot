@@ -318,6 +318,21 @@ client.on('messageCreate', async (message) => {
     // --- EKONOMI: FONDASI & COMMANDS ---
     if (!data.economy) data.economy = {};
 
+    // !bal (Cek saldo sendiri)
+    if (message.content === '!money') {
+        const user = data.economy[message.author.id] || { money: 0 };
+        message.reply(`💰 Saldo kamu saat ini: **${user.money}**`);
+    }
+
+    // !reject (Menolak tantangan duel)
+    if (message.content === '!reject') {
+        const duel = activeDuels[message.author.id];
+        if (!duel) return message.reply('Kamu tidak sedang ditantang!');
+        
+        delete activeDuels[message.author.id];
+        message.channel.send(`🚫 ${message.author} menolak tantangan duel!`);
+    }
+
     // !work
     if (message.content === '!work') {
         const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
