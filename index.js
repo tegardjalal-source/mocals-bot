@@ -101,6 +101,17 @@ cron.schedule('0 0 * * *', async () => {
 // --- EVENT MESSAGE ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
+    
+    // --- COMMAND TEST WELCOME & LEAVE (Admin Only) ---
+if (message.content.startsWith('!testwelcome') && message.member.permissions.has('Administrator')) {
+    client.emit('guildMemberAdd', message.member); // Ini yang memicu event agar bot mengirim pesan welcome
+    message.reply('✅ Simulasi event `guildMemberAdd` telah dijalankan.');
+}
+
+if (message.content.startsWith('!testleave') && message.member.permissions.has('Administrator')) {
+    client.emit('guildMemberRemove', message.member); // Ini yang memicu event agar bot mengirim pesan leave
+    message.reply('✅ Simulasi event `guildMemberRemove` telah dijalankan.');
+}
 
    let data = await fetchData();
     
@@ -250,12 +261,12 @@ client.on('messageCreate', async (message) => {
     
 });
 
-// Event Join/Leave
+// --- EVENT JOIN & LEAVE ---
+
+// Event Member Add (Welcome)
 client.on('guildMemberAdd', async (member) => { 
-    const data = await fetchData(); // Data sekarang diambil dari JSONBin
-    
-    // Mengambil data server berdasarkan ID server
-    const serverData = data[member.guild.id];
+    const data = await fetchData(); 
+    const serverData = data.serverSettings?.[member.guild.id];
     const welcomeId = serverData ? serverData.welcomeId : null;
 
     if (welcomeId) {
@@ -263,10 +274,24 @@ client.on('guildMemberAdd', async (member) => {
         if (ch) {
             ch.send(`Welcome imoet ${member}! ✨`);
         } else {
-            console.log(`DEBUG: Channel dengan ID ${welcomeId} tidak ditemukan di cache server.`);
+            console.log(`DEBUG: Channel dengan ID ${welcomeId} tidak ditemukan.`);
         }
-    } else {
-        console.log(`DEBUG: Data welcomeId tidak ditemukan untuk server ${member.guild.id}.`);
+    }
+});
+
+// Event Member Remove (Leave)
+client.on('guildMemberRemove', async (member) => { 
+    const data = await fetchData(); 
+    const serverData = data.serverSettings?.[member.guild.id];
+    const leaveId = serverData ? serverData.leaveId : null;
+
+    if (leaveId) {
+        const ch = member.guild.channels.cache.get(leaveId);
+        if (ch) {
+            ch.send(`Dadah ${member.user.tag}, sampai jumpa lagi! 😢`);
+        } else {
+            console.log(`DEBUG: Channel dengan ID ${leaveId} untuk leave tidak ditemukan.`);
+        }
     }
 });
 
