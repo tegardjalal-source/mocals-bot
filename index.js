@@ -1,6 +1,22 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('discord.js');
-const fs = require('fs');
+
+const axios = require('axios');
+const BIN_ID = '6a19995121f9ee59d299ebec'; // ID dari website JSONBin
+const MASTER_KEY = process.env.JSONBIN_KEY; 
+
+async function fetchData() {
+    try {
+        const res = await axios.get(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': MASTER_KEY } });
+        return res.data.record;
+    } catch (e) { return {}; }
+}
+
+async function saveData(data) {
+    try {
+        await axios.put(`https://api.jsonbin.io/v3/b/${BIN_ID}`, data, { headers: { 'X-Master-Key': MASTER_KEY, 'Content-Type': 'application/json' } });
+    } catch (e) { console.error("Gagal simpan:", e); }
+}
 
 const client = new Client({
     intents: [
@@ -28,8 +44,9 @@ async function updateBotStatus() {
 }
 
 async function sendUpdateLog(guild, content) {
-    const data = fs.existsSync('./settings.json') ? JSON.parse(fs.readFileSync('./settings.json', 'utf8')) : {};
+    const data = await fetchData();
     const logChannelId = data.serverSettings?.[guild.id]?.logChannelId;
+    
     if (!logChannelId) return;
     const channel = guild.channels.cache.get(logChannelId);
     if (channel) {
@@ -57,8 +74,8 @@ const cron = require('node-cron');
 
 // Fungsi ini berjalan otomatis setiap jam 00:00 pagi
 cron.schedule('0 0 * * *', async () => {
-    const data = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
-    const guild = client.guilds.cache.get(GUILD_ID); // Gunakan GUILD_ID kamu
+    const data = await fetchData(); // <-- GANTI DARI fs.readFileSync
+    const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return;
 
     const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace('/', '-'); 
@@ -85,7 +102,7 @@ cron.schedule('0 0 * * *', async () => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    let data = fs.existsSync('./settings.json') ? JSON.parse(fs.readFileSync('./settings.json', 'utf8')) : {};
+   let data = await fetchData();
     
     // Logika XP & Leveling
     if (!data.messages) data.messages = {};
@@ -100,7 +117,7 @@ client.on('messageCreate', async (message) => {
         data.xp[message.author.id].xp = 0;
         message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${data.xp[message.author.id].level}**! ✨`);
     }
-    fs.writeFileSync('./settings.json', JSON.stringify(data, null, 2));
+    await saveData(data);
 
     // --- COMMANDS ---
     if (message.content === '!ping') await message.reply('Pong! 🏓');
@@ -202,7 +219,8 @@ client.on('messageCreate', async (message) => {
         if (!tgl) return message.reply('Gunakan !sethbd DD-MM');
         if (!data.hbd) data.hbd = {};
         data.hbd[message.author.id] = tgl;
-        fs.writeFileSync('./settings.json', JSON.stringify(data, null, 2));
+        
+        await saveData(data); // <--- GANTI JADI INI
         message.reply('✅ Tanggal ultah disimpan!');
     }
 
@@ -211,10 +229,11 @@ client.on('messageCreate', async (message) => {
         if (!ch) return message.reply('Tag channel!');
         if (!data.serverSettings) data.serverSettings = {};
         data.serverSettings[message.guild.id] = { logChannelId: ch.id };
-        fs.writeFileSync('./settings.json', JSON.stringify(data, null, 2));
+        
+        await saveData(data); // <--- GANTI JADI INI
         message.reply(`✅ Log diatur ke ${ch}`);
     }
-
+    
     if (message.content.startsWith('!postupdate') && message.member.permissions.has('Administrator')) {
         sendUpdateLog(message.guild, message.content.slice(12));
         message.reply('✅ Terkirim!');
@@ -222,12 +241,10 @@ client.on('messageCreate', async (message) => {
 });
 
 // Event Join/Leave
-client.on('guildMemberAdd', (member) => {
-    // Membaca file dengan aman
-    if (!fs.existsSync('./settings.json')) return;
-    const data = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
+client.on('guildMemberAdd', async (member) => { 
+    const data = await fetchData(); // Data sekarang diambil dari JSONBin
     
-    // Mengambil ID channel berdasarkan struktur data di image_d7e7f7.png
+    // Mengambil data server berdasarkan ID server
     const serverData = data[member.guild.id];
     const welcomeId = serverData ? serverData.welcomeId : null;
 
