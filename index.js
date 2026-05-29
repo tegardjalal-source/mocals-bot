@@ -29,6 +29,7 @@ const client = new Client({
 });
 
 const GUILD_ID = '746583847734345741';
+const activeDuels = {};
 
 // --- FUNGSI-FUNGSI ---
 async function updateBotStatus() {
@@ -308,10 +309,98 @@ client.on('messageCreate', async (message) => {
             channel.send(`📢 **Broadcast**: ${broadcastMsg}`).catch(console.error);
             successCount++;
         }
+    
     });
 
-    message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);
+    message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);     
 }
+
+    // --- EKONOMI: FONDASI & COMMANDS ---
+    if (!data.economy) data.economy = {};
+
+    // !work
+    if (message.content === '!work') {
+        const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
+        const now = Date.now();
+        if (now - user.lastWork < 3600000) return message.reply('⏳ Kamu capek! Istirahat dulu 1 jam.');
+        
+        const reward = Math.floor(Math.random() * 500) + 100;
+        user.money += reward;
+        user.lastWork = now;
+        data.economy[message.author.id] = user;
+        await saveData(data);
+        message.reply(`💼 Kamu bekerja dan mendapatkan **${reward}**!`);
+    }
+
+    // !gamble [jumlah]
+    if (message.content.startsWith('!gamble')) {
+        const amount = parseInt(message.content.split(' ')[1]);
+        const user = data.economy[message.author.id];
+        if (!user || user.money < amount) return message.reply('❌ Uang kamu tidak cukup!');
+        if (!amount || amount <= 0) return message.reply('Masukkan jumlah yang benar!');
+
+        const win = Math.random() < 0.45;
+        if (win) {
+            user.money += amount;
+            message.reply(`🎰 Menang! Kamu dapat **${amount}**. Saldo: ${user.money}`);
+        } else {
+            user.money -= amount;
+            message.reply(`💸 Kalah! Kamu kehilangan **${amount}**. Saldo: ${user.money}`);
+        }
+        data.economy[message.author.id] = user;
+        await saveData(data);
+    }
+
+    // !bit @user [jumlah]
+    if (message.content.startsWith('!bit')) {
+        const args = message.content.split(' ');
+        const lawan = message.mentions.members.first();
+        const jumlah = parseInt(args[2]);
+        if (!lawan || !jumlah) return message.reply('Format: !bit @user [jumlah]');
+        if (lawan.id === message.author.id) return message.reply('Gak bisa lawan diri sendiri!');
+        activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
+        message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} sebesar **${jumlah}**! Ketik \`!confirm\` atau \`!reject\`.`);
+    }
+
+    // !confirm
+    if (message.content === '!confirm') {
+        const duel = activeDuels[message.author.id];
+        if (!duel) return message.reply('Kamu tidak sedang ditantang!');
+        const menangId = Math.random() < 0.5 ? message.author.id : duel.penantang;
+        const kalahId = menangId === message.author.id ? duel.penantang : message.author.id;
+        if (!data.economy[menangId]) data.economy[menangId] = { money: 0 };
+        if (!data.economy[kalahId]) data.economy[kalahId] = { money: 0 };
+        data.economy[menangId].money += duel.jumlah;
+        data.economy[kalahId].money -= duel.jumlah;
+        await saveData(data);
+        message.channel.send(`🏆 Pertarungan selesai! Pemenangnya adalah <@${menangId}> dan mendapatkan **${duel.jumlah}**!`);
+        delete activeDuels[message.author.id];
+    }
+
+    // !givecash @user [jumlah]
+    if (message.content.startsWith('!givecash')) {
+        const penerima = message.mentions.members.first();
+        const jumlah = parseInt(message.content.split(' ')[2]);
+        if (!penerima || !jumlah) return message.reply('Format: !givecash @user [jumlah]');
+        if (!data.economy[message.author.id] || data.economy[message.author.id].money < jumlah) return message.reply('Uang tidak cukup!');
+        data.economy[message.author.id].money -= jumlah;
+        if (!data.economy[penerima.id]) data.economy[penerima.id] = { money: 0, lastWork: 0 };
+        data.economy[penerima.id].money += jumlah;
+        await saveData(data);
+        message.reply(`✅ Berhasil mengirim ${jumlah} ke ${penerima}!`);
+    }
+
+    // !leaderboard
+    if (message.content === '!leaderboard') {
+        const sorted = Object.entries(data.economy)
+            .sort((a, b) => b[1].money - a[1].money)
+            .slice(0, 5);
+        let text = '🏆 **Top 5 Orang Terkaya**:\n';
+        for (let i = 0; i < sorted.length; i++) {
+            text += `${i+1}. <@${sorted[i][0]}>: **${sorted[i][1].money}**\n`;
+        }
+        message.reply(text);
+    }
     
 });
 
