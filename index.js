@@ -164,7 +164,34 @@ client.on('messageCreate', async (message) => {
 
     return message.reply({ embeds: [helpEmbed] });
 }
-    
+    if (message.content === '!status') {
+    const statusEmbed = new EmbedBuilder()
+        .setColor(0x00FF00)
+        .setTitle('🤖 Status Mocals Chan')
+        .addFields(
+            { name: '🌐 Latency (Ping)', value: `${client.ws.ping}ms`, inline: true },
+            { name: '⏳ Uptime', value: `${(process.uptime() / 60).toFixed(0)} menit`, inline: true },
+            { name: '👥 Total Member', value: `${message.guild.memberCount}`, inline: true },
+            { name: '💻 Versi Node.js', value: process.version, inline: true }
+        )
+        .setTimestamp();
+
+    return message.reply({ embeds: [statusEmbed] });
+}
+    if (message.content === '!info') {
+    const infoEmbed = new EmbedBuilder()
+        .setColor(0xFF69B4)
+        .setTitle('🌸 Tentang Mocals Chan')
+        .setDescription('Hai! Aku Mocals Chan, asisten ceria yang siap menemanimu di server ini.')
+        .addFields(
+            { name: '🛠️ Apa yang bisa aku lakukan?', value: 'Membantu urusan ekonomi, hiburan, hingga pengingat waktu.', inline: false },
+            { name: '✨ Dibuat dengan', value: 'Node.js & Discord.js', inline: true },
+            { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
+        )
+        .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
+
+    return message.reply({ embeds: [infoEmbed] });
+}
     let data = await fetchData();
 
     // --- COMMAND YOUTUBE NOTIF ---
