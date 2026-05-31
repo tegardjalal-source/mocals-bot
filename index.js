@@ -151,7 +151,7 @@ client.on('messageCreate', async (message) => {
                 "!info - Informasi lebih lanjut"
             )
             .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
-    return message.reply(response); 
+    return message.reply({ embeds: [helpEmbed] }); 
 }
     if (message.content === '!help') {
     const helpEmbed = new EmbedBuilder()
