@@ -62,7 +62,7 @@ async function checkYouTubeLiveStreams() {
                     if (logChannelId) {
                         const channel = client.channels.cache.get(logChannelId);
                         if (channel) {
-                            channel.send(`@everyone 🚨 **LIVE!** https://www.youtube.com/watch?v=${videoId}`);
+                            channel.send(`🚨 **LIVE!** https://www.youtube.com/watch?v=${videoId}`);
                         }
                     }
                 }
