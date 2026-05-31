@@ -139,7 +139,7 @@ cron.schedule('0 0 * * *', async () => {
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-if (message.mentions.has(client.user.id)) {
+    if (message.mentions.has(client.user.id)) {
     const response = 
         "Haloo ada yang bisa mocals bantu?? " +
         "kalo ada, kamu bisa melihat list command berikut dan apa yang bisa mocals chan bantu:\n\n" +
@@ -148,6 +148,21 @@ if (message.mentions.has(client.user.id)) {
         "3. !info - Informasi lebih lanjut";
     
     return message.reply(response);
+}
+    if (message.content === '!help') {
+    const helpEmbed = new EmbedBuilder()
+        .setColor(0x00FF00) // Warna hijau agar senada dengan bot
+        .setTitle('📚 Pusat Bantuan Mocals Chan')
+        .setDescription('Halo! Ini adalah daftar perintah yang bisa kamu gunakan:')
+        .addFields(
+            { name: 'ℹ️ Hiburan & Informasi', value: '!ping, !halo, !gabutnih, !rank, !8ball <pertanyaan>, !coinflip, !remind <detik> <pesan>, !userinfo, !serverinfo', inline: false },
+            { name: '💰 Ekonomi', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>', inline: false },
+            { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
+            { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false }
+        )
+        .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
+
+    return message.reply({ embeds: [helpEmbed] });
 }
     
     let data = await fetchData();
@@ -272,29 +287,11 @@ if (message.mentions.has(client.user.id)) {
         message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${data.xp[message.author.id].level}**! ✨`);
     }
     await saveData(data);
-
-    // --- COMMANDS ---
-    if (message.content === '!ping') return message.reply('Pong! 🏓');
-    if (message.content === '!help') return message.reply( Hallo, untuk command yang bisa anda akses adalah berikut
-        🎮 Perintah Hiburan & Informasi
-!ping – Merespons dengan "Pong! 🏓" untuk mengecek respon bot.
-
-!halo – Menyapa Anda kembali.
-
-!gabutnih – Respons bot saat Anda sedang bosan.
-
-!rank – Mengecek Level dan total XP Anda dari keaktifan mengetik di server.
-
-!8ball <pertanyaan> – Mengajukan pertanyaan ke bola peramal 8ball.
-
-!coinflip – Melempar koin acak antara Kepala (Heads) atau Ekor (Tails).
-
-!remind <detik> <pesan> – Mengatur pengingat waktu (Contoh: !remind 60 belajar akan mengingatkan dalam 1 menit).
-
-!userinfo atau !userinfo @user – Menampilkan info lengkap akun Discord, peran (role), dan total pesan.
-
-!serverinfo – Menampilkan informasi server (Jumlah member dan tanggal dibuat).');
     
+    // --- COMMANDS ---
+    
+    if (message.content === '!ping') return message.reply('Pong! 🏓');
+    if (message.content === '!help') return message.reply( Hallo, untuk command yang bisa anda akses bi
     if (message.content === '!halo') return message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
     if (message.content === '!gabutnih') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
     
