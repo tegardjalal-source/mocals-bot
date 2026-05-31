@@ -291,7 +291,6 @@ client.on('messageCreate', async (message) => {
     // --- COMMANDS ---
     
     if (message.content === '!ping') return message.reply('Pong! 🏓');
-    if (message.content === '!help') return message.reply( Hallo, untuk command yang bisa anda akses bi
     if (message.content === '!halo') return message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
     if (message.content === '!gabutnih') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
     
