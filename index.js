@@ -90,7 +90,7 @@ async function updateBotStatus() {
         const onlineCount = members.filter(m => !m.user.bot && m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)).size;
         const totalHumans = members.filter(m => !m.user.bot).size;
         const offlineCount = totalHumans - onlineCount;
-        client.user.setActivity(`🍀 𝕺𝖓𝖑𝖎𝖓𝖊: ${onlineCount} | 🍁 𝕺𝖋𝖋𝖑𝖎𝖓𝖊: ${offlineCount}`, { type: ActivityType.Custom });
+        client.user.setActivity(`🍀 𝐎𝐧𝐥𝐢𝐧𝐞: ${onlineCount} | 🍁 𝐎𝐟𝐟𝐥𝐢𝐧𝐞: ${offlineCount}`, { type: ActivityType.Custom });
     } catch (e) { console.error('Gagal update status:', e); }
 }
 
