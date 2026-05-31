@@ -66,7 +66,7 @@ async function checkYouTubeLiveStreams() {
                         const channel = client.channels.cache.get(logChannelId);
                         if (channel) {
                             // Ditambahkan @everyone di sini agar otomatis tag
-                            channel.send(`@everyone 🚨 **LIVE!** https://www.youtube.com/watch?v=${videoId}`);
+                            channel.send(`@everyone 🚨 **Ada yang lagi live nihh, jangan lupa mampir yaa...** https://www.youtube.com/watch?v=${videoId}`);
                         }
                     }
                 }
