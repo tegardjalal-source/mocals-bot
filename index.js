@@ -275,6 +275,26 @@ if (message.mentions.has(client.user.id)) {
 
     // --- COMMANDS ---
     if (message.content === '!ping') return message.reply('Pong! 🏓');
+    if (message.content === '!help') return message.reply( Hallo, untuk command yang bisa anda akses adalah berikut
+        🎮 Perintah Hiburan & Informasi
+!ping – Merespons dengan "Pong! 🏓" untuk mengecek respon bot.
+
+!halo – Menyapa Anda kembali.
+
+!gabutnih – Respons bot saat Anda sedang bosan.
+
+!rank – Mengecek Level dan total XP Anda dari keaktifan mengetik di server.
+
+!8ball <pertanyaan> – Mengajukan pertanyaan ke bola peramal 8ball.
+
+!coinflip – Melempar koin acak antara Kepala (Heads) atau Ekor (Tails).
+
+!remind <detik> <pesan> – Mengatur pengingat waktu (Contoh: !remind 60 belajar akan mengingatkan dalam 1 menit).
+
+!userinfo atau !userinfo @user – Menampilkan info lengkap akun Discord, peran (role), dan total pesan.
+
+!serverinfo – Menampilkan informasi server (Jumlah member dan tanggal dibuat).');
+    
     if (message.content === '!halo') return message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
     if (message.content === '!gabutnih') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
     
