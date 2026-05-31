@@ -137,19 +137,21 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
-   if (message.mentions.has(client.user.id)) {
-        const helpEmbed = new EmbedBuilder()
-            .setColor(0x00FF00)
-            .setTitle('📚 Pusat Bantuan Mocals Chan')
-            .setDescription(
+client.on('messageCreate', async (message) => {
+
+    if (message.author.bot) return;
+    if (message.mentions.has(client.user.id)) {
+    const helpEmbed = new EmbedBuilder()
+        .setColor(0x00FF00) // Warna hijau
+        .setTitle('📚 Pusat Bantuan Mocals Chan')
+        .setDescription(
                 "Haloo ada yang bisa mocals bantu?? kalo ada, kamu bisa melihat list command berikut dan apa yang bisa mocals chan bantu:\n\n" +
                 "!help - Menampilkan semua command\n" +
                 "!status - Cek status bot\n" +
                 "!info - Informasi lebih lanjut"
             )
             .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
-
-        return message.reply({ embeds: [helpEmbed] });
+    return message.reply(response); 
 }
     if (message.content === '!help') {
     const helpEmbed = new EmbedBuilder()
