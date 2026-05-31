@@ -139,6 +139,17 @@ cron.schedule('0 0 * * *', async () => {
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
+if (message.mentions.has(client.user.id)) {
+    const response = 
+        "Haloo ada yang bisa mocals bantu?? " +
+        "kalo ada, kamu bisa melihat list command berikut dan apa yang bisa mocals chan bantu:\n\n" +
+        "1. !help - Menampilkan semua command\n" +
+        "2. !status - Cek status bot\n" +
+        "3. !info - Informasi lebih lanjut";
+    
+    return message.reply(response);
+}
+    
     let data = await fetchData();
 
     // --- COMMAND YOUTUBE NOTIF ---
