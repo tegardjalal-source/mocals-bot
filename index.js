@@ -3,7 +3,13 @@ const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('disco
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
-
+const { GoogleGenerativeAI } = require("@google/generative-ai"); // Tambahkan ini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-flash",
+    systemInstruction: "Kamu adalah Mocals Chan, bot Discord yang ceria, suka menggunakan emoji, dan suka membantu member komunitas." 
+});
+const chat = model.startChat({ history: [] });
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
 const MASTER_KEY = process.env.JSONBIN_KEY; 
 
@@ -138,7 +144,13 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 client.on('messageCreate', async (message) => {
-
+if (message.author.bot) return;
+if (message.mentions.has(client.user.id)) {
+    message.channel.sendTyping();
+    const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+    const result = await chat.sendMessage(prompt);
+    return message.reply(result.response.text());
+}
     if (message.author.bot) return;
     if (message.mentions.has(client.user.id)) {
     const helpEmbed = new EmbedBuilder()
