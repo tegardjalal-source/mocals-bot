@@ -223,17 +223,22 @@ client.on('messageCreate', async (message) => {
 
     if (message.content === '!listchannels') {
     const channels = data.ytChannels || [];
-    
-    if (channels.length === 0) {
-        return message.reply('📺 **Daftar Channel Dipantau**:\nBelum ada channel yang dipantau.');
-    }
+    if (channels.length === 0) return message.reply('Belum ada channel.');
 
-    // Membuat list dengan nomor urut
-    const list = channels.map((id, index) => `${index + 1}. Channel ID: ${id}`).join('\n');
-    
+    // Mengambil info nama dari YouTube API
+    const channelDetails = await Promise.all(channels.map(async (id) => {
+        try {
+            const res = await youtube.channels.list({ id: id, part: 'snippet' });
+            const title = res.data.items[0].snippet.title;
+            return `${title} (https://www.youtube.com/channel/${id})`;
+        } catch (e) {
+            return `Channel ID: ${id} (Error mengambil nama)`;
+        }
+    }));
+
+    const list = channelDetails.map((info, index) => `${index + 1}. ${info}`).join('\n');
     return message.reply(`📺 **Daftar Channel Dipantau**:\n${list}`);
 }
-
     if (message.content === '!testyt' && message.member.permissions.has('Administrator')) {
         message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
         
