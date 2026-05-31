@@ -222,9 +222,17 @@ client.on('messageCreate', async (message) => {
     }
 
     if (message.content === '!listchannels') {
-        const list = data.ytChannels && data.ytChannels.length > 0 ? data.ytChannels.join('\n') : 'Belum ada channel.';
-        return message.reply(`📺 **Daftar Channel Dipantau**:\n${list}`);
+    const channels = data.ytChannels || [];
+    
+    if (channels.length === 0) {
+        return message.reply('📺 **Daftar Channel Dipantau**:\nBelum ada channel yang dipantau.');
     }
+
+    // Membuat list dengan nomor urut
+    const list = channels.map((id, index) => `${index + 1}. Channel ID: ${id}`).join('\n');
+    
+    return message.reply(`📺 **Daftar Channel Dipantau**:\n${list}`);
+}
 
     if (message.content === '!testyt' && message.member.permissions.has('Administrator')) {
         message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
