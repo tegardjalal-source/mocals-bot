@@ -248,18 +248,19 @@ client.on('messageCreate', async (message) => {
                 await saveData(data);
                 const warnaRarity = { 'SSR': '#ff0055', 'SR': '#ffaa00', 'R': '#00aaff', 'C': '#aaaaaa' };
                 const cardEmbed = new EmbedBuilder()
-                    .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
-                    .setDescription(`<@${userId}> mendapatkan kartu karakter baru!`)
-                    .addFields(
-                        { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
-                        { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
-                        { name: '🆔 ID MAL (Buat Jual)', value: `\`${hasil.id}\``, inline: true },
-                        { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
-                    )
-                    .setImage(hasil.image)
-                    .setColor(warnaRarity[hasil.rarity] || '#ffffff')
-                    .setURL(hasil.url)
-                    .setFooter({ text: "Mocals Chan Gacha System • Powered by MyAnimeList" });
+                 .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
+                 .setDescription(`<@${userId}> mendapatkan kartu karakter baru!`)
+                 .addFields(
+                     { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
+                     { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
+                     { name: '🆔 ID MAL (Buat Jual)', value: `\`${hasil.id}\``, inline: true },
+                     { name: '📈 MAL Fav Rank', value: `🏅 **Top ${hasil.malRank}**`, inline: true }, // <-- BARIS BARU!
+                     { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
+    )
+                 .setImage(hasil.image)
+                 .setColor(warnaRarity[hasil.rarity] || '#ffffff')
+                 .setURL(hasil.url)
+                 .setFooter({ text: "Mocals Chan Gacha System • Powered by MyAnimeList" });
                 return loadingMsg.edit({ content: "✨ Takdir lu telah tiba! ✨", embeds: [cardEmbed] });
             } catch (error) {
                 console.error("Error Gacha:", error);
