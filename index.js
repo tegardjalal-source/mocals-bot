@@ -6,7 +6,7 @@ const { google } = require('googleapis');
 const { rollGachaMALResmi } = require('./gachaEngine');
 
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
-const MASTER_KEY = process.env.JSONBIN_KEY; 
+const MASTER_KEY = process.env.JSONBIN_KEY;
 
 async function fetchData() {
     try {
@@ -40,7 +40,7 @@ const youtube = google.youtube({
     auth: process.env.YOUTUBE_API_KEY
 });
 
-// === PERBAIKAN 1: ANTI-SPAM YOUTUBE LIVE & RESET CACHE JIKA SELESAI ===
+// === ANTI-SPAM YOUTUBE LIVE ===
 async function checkYouTubeLiveStreams() {
     const data = await fetchData();
     const channels = data.ytChannels || [];
@@ -55,31 +55,26 @@ async function checkYouTubeLiveStreams() {
             const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' });
             
             const isLive = videoRes.data.items[0].snippet.liveBroadcastContent === 'live';
-
-            // Jika sedang LIVE dan BELUM PERNAH dinotifikasi
             if (isLive && !notifiedVideosCache.has(videoId)) {
                 console.log(`Channel ${channelId} sedang LIVE!`);
-                
-                // Kirim ke semua server yang sudah setup !setchannelnotif
                 for (const guildId in data.serverSettings) {
                     const logChannelId = data.serverSettings[guildId].ytLogChannel;
                     if (logChannelId) {
                         const channel = client.channels.cache.get(logChannelId);
                         if (channel) {
-                            // Ditambahkan @everyone di sini agar otomatis tag
                             channel.send(`@everyone 🚨 **Ada yang lagi live nihh, jangan lupa mampir yaa...** https://www.youtube.com/watch?v=${videoId}`);
                         }
                     }
                 }
-                notifiedVideosCache.add(videoId); // Simpan ke cache agar tidak spam
+                notifiedVideosCache.add(videoId);
             } 
-            // Jika SUDAH TIDAK LIVE tapi ID-nya masih ada di cache (Stream Baru Selesai)
             else if (!isLive && notifiedVideosCache.has(videoId)) {
-                notifiedVideosCache.delete(videoId); // Hapus dari cache supaya nanti bisa live lagi
+                notifiedVideosCache.delete(videoId);
                 console.log(`Live streaming ${videoId} telah selesai. Cache dibersihkan.`);
             }
-
-        } catch (err) { console.error(`Error cek channel ${channelId}:`, err.message); }
+        } catch (err) { 
+            console.error(`Error cek channel ${channelId}:`, err.message);
+        }
     }
 }
 
@@ -98,7 +93,6 @@ async function updateBotStatus() {
 async function sendUpdateLog(guild, content) {
     const data = await fetchData();
     const logChannelId = data.serverSettings?.[guild.id]?.logChannelId;
-    
     if (!logChannelId) return;
     const channel = guild.channels.cache.get(logChannelId);
     if (channel) {
@@ -110,7 +104,6 @@ async function sendUpdateLog(guild, content) {
 
 client.once('ready', async () => {
     console.log(`${client.user.tag} sudah siap beraksi!`);
-    
     checkYouTubeLiveStreams();
     setInterval(checkYouTubeLiveStreams, 60000);
     
@@ -119,7 +112,6 @@ client.once('ready', async () => {
         await guild.members.fetch().catch(console.error);
         console.log("Data member berhasil dimuat ke cache.");
     }
-
     updateBotStatus();
     setInterval(updateBotStatus, 60000);
 });
@@ -150,282 +142,273 @@ cron.schedule('0 0 * * *', async () => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // === UTAMAKAN PENGECEKAN PERINTAH (COMMAND) TERLEBIH DAHULU ===
-
-    // === Di bawah baris 150 (if (message.author.bot) return;) ===
-// Pemecah argumen biar bot tau mana perintah utama, mana teks tambahannya
-if (!message.content.startsWith('!')) return;
-const args = message.content.slice(1).trim().split(/ +/);
-const command = args.shift().toLowerCase();
-
-// === Kode !help lu yang lama ===
-if (command === 'help') { // <--- ini diganti dari (message.content === '!help')
-    const helpEmbed = new EmbedBuilder()
-    // ... isi helpEmbed lu ...
-    return message.reply({ embeds: [helpEmbed] });
-}
-
-// === !GACHA NYA ===
-if (command === 'gacha') {
-    const hargaGacha = 500; 
-    const userId = message.author.id;
-
-    try {
-        // Ambil data ekonomi dari DB JSONbin lu
-        let data = await fetchData(); 
-        if (!data.users) data.users = {};
-        if (!data.users[userId]) data.users[userId] = { money: 0, cards: [] };
-
-        const userWallet = data.users[userId];
-
-        if (userWallet.money < hargaGacha) {
-            return message.reply(`✖️ Dompet lu kering! Sekali gacha butuh **$${hargaGacha}**, duit lu cuma **$${userWallet.money}**.`);
-        }
-
-        const loadingMsg = await message.reply("🔮 Menghubungi server MyAnimeList... Mencari takdir waifu/husbando lu...");
-
-        // Panggil fungsi engine gacha MAL resmi yang ditaruh di gachaEngine.js
-        const hasil = await rollGachaMALResmi();
-
-        if (!hasil.sukses) {
-            return loadingMsg.edit(hasil.pesan);
-        }
-
-        // Potong duit & simpan kartu
-        userWallet.money -= hargaGacha;
-        if (!userWallet.cards) userWallet.cards = [];
-        
-        const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
-        if (sudahPunya) {
-            sudahPunya.count += 1;
-        } else {
-            userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
-        }
-
-        await saveData(data);
-
-        const warnaRarity = { 'SSR': '#ff0055', 'SR': '#ffaa00', 'R': '#00aaff', 'C': '#aaaaaa' };
-
-        const cardEmbed = new EmbedBuilder()
-            .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
-            .setDescription(`<@${userId}> mendapatkan kartu karakter baru!`)
-            .addFields(
-                { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
-                { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
-                { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
-            )
-            .setImage(hasil.image)
-            .setColor(warnaRarity[hasil.rarity] || '#ffffff')
-            .setURL(hasil.url)
-            .setFooter({ text: "Mocals Chan Gacha System • Powered by MyAnimeList" });
-
-        return loadingMsg.edit({ content: "✨ Takdir lu telah tiba! ✨", embeds: [cardEmbed] });
-
-    } catch (error) {
-        console.error("Error Gacha:", error);
-        return message.reply("✖️ Terjadi kesalahan internal saat memproses gacha.");
-    }
-}
-
-// === Setelah block gacha ini, baru lanjut ke command status lu yang lama ===
-if (command === 'status') { // <--- ini diganti dari (message.content === '!status')
-    // ... isi status lu ...
-}
-    
-    if (message.content === '!help') {
+    // === PENGECKAN MENTION BOT ===
+    if (message.mentions.has(client.user.id) && !message.content.startsWith('!')) {
         const helpEmbed = new EmbedBuilder()
-            .setColor(0x00FF00)
+            .setColor(0x00FF00) 
             .setTitle('📚 Pusat Bantuan Mocals Chan')
-            .setDescription('Halo! Ini adalah daftar perintah yang bisa kamu gunakan:')
-            .addFields(
-                { name: 'ℹ️ Hiburan & Informasi', value: '!ping, !halo, !gabutnih, !rank, !8ball <pertanyaan>, !coinflip, !remind <detik> <pesan>, !userinfo, !serverinfo', inline: false },
-                { name: '💰 Ekonomi', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>', inline: false },
-                { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
-                { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false }
+            .setDescription(
+                "Haloo ada yang bisa mocals bantu?? kalo ada, kamu bisa melihat list command berikut dan apa yang bisa mocals chan bantu:\n\n" +
+                "`!help` - Menampilkan semua command\n" +
+                "`!status` - Cek status bot\n" +
+                "`!info` - Informasi lebih lanjut"
             )
             .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
-
-        return message.reply({ embeds: [helpEmbed] });
+        return message.reply({ embeds: [helpEmbed] }); 
     }
 
-    if (message.content === '!status') {
-        const statusEmbed = new EmbedBuilder()
-            .setColor(0x00FF00)
-            .setTitle('🤖 Status Mocals Chan')
-            .addFields(
-                { name: '🌐 Latency (Ping)', value: `${client.ws.ping}ms`, inline: true },
-                { name: '⏳ Uptime', value: `${(process.uptime() / 60).toFixed(0)} menit`, inline: true },
-                { name: '👥 Total Member', value: `${message.guild.memberCount}`, inline: true },
-                { name: '💻 Versi Node.js', value: process.version, inline: true }
-            )
-            .setTimestamp();
-        return message.reply({ embeds: [statusEmbed] });
-    }
-
-    if (message.content === '!info') {
-        const infoEmbed = new EmbedBuilder()
-            .setColor(0xFF69B4)
-            .setTitle('🌸 Tentang Mocals Chan')
-            .setDescription('Hai! Aku Mocals Chan, asisten ceria yang siap menemanimu di server ini.')
-            .addFields(
-                { name: '🛠️ Apa yang bisa aku lakukan?', value: 'Membantu urusan ekonomi, hiburan, hingga pengingat waktu.', inline: false },
-                { name: '✨ Dibuat dengan', value: 'Node.js & Discord.js', inline: true },
-                { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
-            )
-            .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
-        return message.reply({ embeds: [infoEmbed] });
+    // Identifikasi apakah pesan adalah command
+    const isCommand = message.content.startsWith('!');
+    let command = '';
+    let args = [];
+    
+    if (isCommand) {
+        args = message.content.slice(1).trim().split(/ +/);
+        command = args.shift().toLowerCase();
     }
 
     let data = await fetchData();
 
-    // --- COMMAND YOUTUBE NOTIF ---
-    if (message.content.startsWith('!setchannelnotif') && message.member.permissions.has('Administrator')) {
-        const ch = message.mentions.channels.first();
-        if (!ch) return message.reply('Tag channel-nya!');
-        if (!data.serverSettings) data.serverSettings = {};
-        if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
-        
-        data.serverSettings[message.guild.id].ytLogChannel = ch.id;
-        await saveData(data);
-        return message.reply(`✅ Channel notifikasi live diatur ke ${ch}`);
-    }
-
-    if (message.content.startsWith('!addchannel')) {
-        const id = message.content.split(' ')[1];
-        if (!id) return message.reply('Masukkan ID channel!');
-        if (!data.ytChannels) data.ytChannels = [];
-        if (data.ytChannels.includes(id)) return message.reply('Channel sudah ada di list!');
-        
-        data.ytChannels.push(id);
-        await saveData(data);
-        return message.reply(`✅ Channel ${id} berhasil ditambahkan!`);
-    }
-
-    if (message.content === '!listchannels') {
-        const channels = data.ytChannels || [];
-        if (channels.length === 0) return message.reply('Belum ada channel.');
-
-        const channelDetails = await Promise.all(channels.map(async (id) => {
-            try {
-                const res = await youtube.channels.list({ id: id, part: 'snippet' });
-                const title = res.data.items[0].snippet.title;
-                return `${title} (https://www.youtube.com/channel/${id})`;
-            } catch (e) {
-                return `Channel ID: ${id} (Error mengambil nama)`;
-            }
-        }));
-        const list = channelDetails.map((info, index) => `${index + 1}. ${info}`).join('\n');
-        return message.reply(`📺 **Daftar Channel Dipantau**:\n${list}`);
-    }
-
-    if (message.content === '!testyt' && message.member.permissions.has('Administrator')) {
-        message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
-        const data = await fetchData();
-        const channels = data.ytChannels || [];
-        const logChannelId = data.serverSettings?.[message.guild.id]?.ytLogChannel;
-        const targetChannel = logChannelId ? client.channels.cache.get(logChannelId) : null;
-
-        if (!logChannelId || !targetChannel) {
-            return message.channel.send('❌ Channel notifikasi belum diatur atau tidak ditemukan. Gunakan `!setchannelnotif #channel`!');
+    // === KELOMPOK COMMAND 1: CORE & ADMIN CONFIG (TIDAK DAPAT XP) ===
+    if (isCommand) {
+        if (command === 'help') {
+            const helpEmbed = new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setTitle('📚 Pusat Bantuan Mocals Chan')
+                .setDescription('Halo! Ini adalah daftar perintah yang bisa kamu gunakan:')
+                .addFields(
+                    { name: 'ℹ️ Hiburan & Informasi', value: '!ping, !halo, !gabutnih, !rank, !8ball <pertanyaan>, !coinflip, !remind <detik> <pesan>, !userinfo, !serverinfo', inline: false },
+                    { name: '💰 Ekonomi', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>', inline: false },
+                    { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
+                    { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false },
+                    { name: '🔮 Gacha Anime', value: '!gacha (Sekali roll $500)', inline: false }
+                )
+                .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
+            return message.reply({ embeds: [helpEmbed] });
         }
 
-        let found = false;
-        for (const channelId of channels) {
+        if (command === 'status') {
+            const statusEmbed = new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setTitle('🤖 Status Mocals Chan')
+                .addFields(
+                    { name: '🌐 Latency (Ping)', value: `${client.ws.ping}ms`, inline: true },
+                    { name: '⏳ Uptime', value: `${(process.uptime() / 60).toFixed(0)} menit`, inline: true },
+                    { name: '👥 Total Member', value: `${message.guild.memberCount}`, inline: true },
+                    { name: '💻 Versi Node.js', value: process.version, inline: true }
+                )
+                .setTimestamp();
+            return message.reply({ embeds: [statusEmbed] });
+        }
+
+        if (command === 'info') {
+            const infoEmbed = new EmbedBuilder()
+                .setColor(0xFF69B4)
+                .setTitle('🌸 Tentang Mocals Chan')
+                .setDescription('Hai! Aku Mocals Chan, asisten ceria yang siap menemanimu di server ini.')
+                .addFields(
+                    { name: '🛠️ Apa yang bisa aku lakukan?', value: 'Membantu urusan ekonomi, hiburan, hingga pengingat waktu.', inline: false },
+                    { name: '✨ Dibuat dengan', value: 'Node.js & Discord.js', inline: true },
+                    { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
+                )
+                .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
+            return message.reply({ embeds: [infoEmbed] });
+        }
+
+        // === FITUR GACHA (SUDAH DISINKRONKAN DENGAN BOT ECONOMY) ===
+        if (command === 'gacha') {
+            const hargaGacha = 500; 
+            const userId = message.author.id;
+
             try {
-                const playlistId = 'UU' + channelId.substring(2);
-                const res = await youtube.playlistItems.list({ playlistId, part: 'snippet', maxResults: 1 });
-                if (!res.data.items.length) continue;
-                
-                const videoId = res.data.items[0].snippet.resourceId.videoId;
-                const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' });
-                if (videoRes.data.items[0].snippet.liveBroadcastContent === 'live') {
-                    targetChannel.send(`📢 **[TEST]** Channel YouTube sedang LIVE! https://www.youtube.com/watch?v=${videoId}`);
-                    found = true;
+                if (!data.economy) data.economy = {};
+                if (!data.economy[userId]) data.economy[userId] = { money: 0, lastWork: 0, cards: [] };
+                const userWallet = data.economy[userId];
+
+                if (userWallet.money < hargaGacha) {
+                    return message.reply(`✖️ Dompet lu kering! Sekali gacha butuh **$${hargaGacha}**, duit lu cuma **$${userWallet.money}**.`);
                 }
-            } catch (err) { console.error(`Error test channel ${channelId}:`, err.message); }
-        }
 
-        if (!found) {
-            message.channel.send('⚠️ Tidak ada channel di list yang sedang live saat ini.');
-        }
-        return message.channel.send('✅ Pengecekan manual selesai.');
-    }
- 
-    if (message.content.startsWith('!removechannel')) {
-        const id = message.content.split(' ')[1];
-        if (!data.ytChannels) return message.reply('List channel kosong!');
-        
-        data.ytChannels = data.ytChannels.filter(c => c !== id);
-        await saveData(data);
-        return message.reply(`✅ Channel ${id} deleted dari list.`);
-    }
+                const loadingMsg = await message.reply("🔮 Menghubungi server MyAnimeList... Mencari takdir waifu/husbando lu...");
+                const hasil = await rollGachaMALResmi();
+                if (!hasil.sukses) {
+                    return loadingMsg.edit(hasil.pesan);
+                }
 
-    // --- COMMAND SETUP WELCOME & LEAVE ---
-    if (message.content.startsWith('!setwelcome') && message.member.permissions.has('Administrator')) {
-        const ch = message.mentions.channels.first();
-        if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
-        if (!data.serverSettings) data.serverSettings = {};
-        if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
-        data.serverSettings[message.guild.id].welcomeId = ch.id;
-        await saveData(data);
-        return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
-    }
+                userWallet.money -= hargaGacha;
+                if (!userWallet.cards) userWallet.cards = [];
+                
+                const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
+                if (sudahPunya) {
+                    sudahPunya.count += 1;
+                } else {
+                    userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
+                }
 
-    if (message.content.startsWith('!setleave') && message.member.permissions.has('Administrator')) {
-        const ch = message.mentions.channels.first();
-        if (!ch) return message.reply('Tag channel-nya! Contoh: !setleave #leave');
-        if (!data.serverSettings) data.serverSettings = {};
-        if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
-        data.serverSettings[message.guild.id].leaveId = ch.id;
-        await saveData(data);
-        return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
-    }
-    
-    if (message.content.startsWith('!testwelcome') && message.member.permissions.has('Administrator')) {
-        client.emit('guildMemberAdd', message.member);
-        return message.reply('✅ Simulasi event `guildMemberAdd` telah dijalankan.');
-    }
-
-    if (message.content.startsWith('!testleave') && message.member.permissions.has('Administrator')) {
-        client.emit('guildMemberRemove', message.member);
-        return message.reply('✅ Simulasi event `guildMemberRemove` telah dijalankan.');
-    }
-
-    // --- SETUP LOGS & BROADCAST ---
-    if (message.content.startsWith('!setupupdate') && message.member.permissions.has('Administrator')) {
-        const ch = message.mentions.channels.first();
-        if (!ch) return message.reply('Tag channel!');
-        if (!data.serverSettings) data.serverSettings = {};
-        data.serverSettings[message.guild.id] = { logChannelId: ch.id };
-        await saveData(data);
-        return message.reply(`✅ Log diatur ke ${ch}`);
-    }
-    
-    if (message.content.startsWith('!postupdate') && message.member.permissions.has('Administrator')) {
-        sendUpdateLog(message.guild, message.content.slice(12));
-        return message.reply('✅ Terkirim!');
-    }
-
-    if (message.content.startsWith('!mocalschanbc') && message.member.permissions.has('Administrator')) {
-        const targetChannel = message.mentions.channels.first();
-        const broadcastMsg = message.content.slice(14).replace(/<#[0-9]+>/, '').trim();
-
-        if (!targetChannel || !broadcastMsg) {
-            return message.reply('Format salah! Contoh: !mocalschanbc #announcement Pesan kamu');
-        }
-
-        let successCount = 0;
-        client.guilds.cache.forEach(guild => {
-            const channel = guild.channels.cache.get(targetChannel.id);
-            if (channel) {
-                channel.send(`📢 **Broadcast**: ${broadcastMsg}`).catch(console.error);
-                successCount++;
+                await saveData(data);
+                const warnaRarity = { 'SSR': '#ff0055', 'SR': '#ffaa00', 'R': '#00aaff', 'C': '#aaaaaa' };
+                const cardEmbed = new EmbedBuilder()
+                    .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
+                    .setDescription(`<@${userId}> mendapatkan kartu karakter baru!`)
+                    .addFields(
+                        { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
+                        { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
+                        { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
+                    )
+                    .setImage(hasil.image)
+                    .setColor(warnaRarity[hasil.rarity] || '#ffffff')
+                    .setURL(hasil.url)
+                    .setFooter({ text: "Mocals Chan Gacha System • Powered by MyAnimeList" });
+                return loadingMsg.edit({ content: "✨ Takdir lu telah tiba! ✨", embeds: [cardEmbed] });
+            } catch (error) {
+                console.error("Error Gacha:", error);
+                return message.reply("✖️ Terjadi kesalahan internal saat memproses gacha.");
             }
-        });
-        return message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);     
+        }
+
+        // --- MANAJEMEN YOUTUBE ---
+        if (command === 'setchannelnotif' && message.member.permissions.has('Administrator')) {
+            const ch = message.mentions.channels.first();
+            if (!ch) return message.reply('Tag channel-nya!');
+            if (!data.serverSettings) data.serverSettings = {};
+            if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+            
+            data.serverSettings[message.guild.id].ytLogChannel = ch.id;
+            await saveData(data);
+            return message.reply(`✅ Channel notification live diatur ke ${ch}`);
+        }
+
+        if (command === 'addchannel') {
+            const id = args[0];
+            if (!id) return message.reply('Masukkan ID channel!');
+            if (!data.ytChannels) data.ytChannels = [];
+            if (data.ytChannels.includes(id)) return message.reply('Channel sudah ada di list!');
+            
+            data.ytChannels.push(id);
+            await saveData(data);
+            return message.reply(`✅ Channel ${id} berhasil ditambahkan!`);
+        }
+
+        if (command === 'listchannels') {
+            const channels = data.ytChannels || [];
+            if (channels.length === 0) return message.reply('Belum ada channel.');
+
+            const channelDetails = await Promise.all(channels.map(async (id) => {
+                try {
+                    const res = await youtube.channels.list({ id: id, part: 'snippet' });
+                    const title = res.data.items[0].snippet.title;
+                    return `${title} (https://www.youtube.com/channel/${id})`;
+                } catch (e) { return `Channel ID: ${id} (Error mengambil nama)`; }
+            }));
+            const list = channelDetails.map((info, index) => `${index + 1}. ${info}`).join('\n');
+            return message.reply(`📺 **Daftar Channel Dipantau**:\n${list}`);
+        }
+
+        if (command === 'testyt' && message.member.permissions.has('Administrator')) {
+            message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
+            const channels = data.ytChannels || [];
+            const logChannelId = data.serverSettings?.[message.guild.id]?.ytLogChannel;
+            const targetChannel = logChannelId ? client.channels.cache.get(logChannelId) : null;
+
+            if (!logChannelId || !targetChannel) {
+                return message.channel.send('❌ Channel notifikasi belum diatur. Gunakan `!setchannelnotif #channel`!');
+            }
+
+            let found = false;
+            for (const channelId of channels) {
+                try {
+                    const playlistId = 'UU' + channelId.substring(2);
+                    const res = await youtube.playlistItems.list({ playlistId, part: 'snippet', maxResults: 1 });
+                    if (!res.data.items.length) continue;
+                    
+                    const videoId = res.data.items[0].snippet.resourceId.videoId;
+                    const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' });
+                    if (videoRes.data.items[0]?.snippet?.liveBroadcastContent === 'live') {
+                        targetChannel.send(`📢 **[TEST]** Channel YouTube sedang LIVE! https://www.youtube.com/watch?v=${videoId}`);
+                        found = true;
+                    }
+                } catch (err) { console.error(`Error test channel ${channelId}:`, err.message); }
+            }
+            if (!found) message.channel.send('⚠️ Tidak ada channel di list yang sedang live saat ini.');
+            return message.channel.send('✅ Pengecekan manual selesai.');
+        }
+
+        if (command === 'removechannel') {
+            const id = args[0];
+            if (!data.ytChannels) return message.reply('List channel kosong!');
+            data.ytChannels = data.ytChannels.filter(c => c !== id);
+            await saveData(data);
+            return message.reply(`✅ Channel ${id} dihapus dari list.`);
+        }
+
+        // --- WELCOME & LEAVE CONFIG ---
+        if (command === 'setwelcome' && message.member.permissions.has('Administrator')) {
+            const ch = message.mentions.channels.first();
+            if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
+            if (!data.serverSettings) data.serverSettings = {};
+            if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+            data.serverSettings[message.guild.id].welcomeId = ch.id;
+            await saveData(data);
+            return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
+        }
+
+        if (command === 'setleave' && message.member.permissions.has('Administrator')) {
+            const ch = message.mentions.channels.first();
+            if (!ch) return message.reply('Tag channel-nya! Contoh: !setleave #leave');
+            if (!data.serverSettings) data.serverSettings = {};
+            if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+            data.serverSettings[message.guild.id].leaveId = ch.id;
+            await saveData(data);
+            return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
+        }
+        
+        if (command === 'testwelcome' && message.member.permissions.has('Administrator')) {
+            client.emit('guildMemberAdd', message.member);
+            return message.reply('✅ Simulasi event `guildMemberAdd` dijalankan.');
+        }
+
+        if (command === 'testleave' && message.member.permissions.has('Administrator')) {
+            client.emit('guildMemberRemove', message.member);
+            return message.reply('✅ Simulasi event `guildMemberRemove` dijalankan.');
+        }
+
+        // --- CONFIG UPDATES & BROADCAST ---
+        if (command === 'setupupdate' && message.member.permissions.has('Administrator')) {
+            const ch = message.mentions.channels.first();
+            if (!ch) return message.reply('Tag channel!');
+            if (!data.serverSettings) data.serverSettings = {};
+            data.serverSettings[message.guild.id] = { logChannelId: ch.id };
+            await saveData(data);
+            return message.reply(`✅ Log diatur ke ${ch}`);
+        }
+        
+        if (command === 'postupdate' && message.member.permissions.has('Administrator')) {
+            sendUpdateLog(message.guild, args.join(' '));
+            return message.reply('✅ Terkirim!');
+        }
+
+        if (command === 'mocalschanbc' && message.member.permissions.has('Administrator')) {
+            const targetChannel = message.mentions.channels.first();
+            const broadcastMsg = message.content.slice(14).replace(/<#[0-9]+>/, '').trim();
+
+            if (!targetChannel || !broadcastMsg) {
+                return message.reply('Format salah! Contoh: !mocalschanbc #announcement Pesan kamu');
+            }
+
+            let successCount = 0;
+            client.guilds.cache.forEach(guild => {
+                const channel = guild.channels.cache.get(targetChannel.id);
+                if (channel) {
+                    channel.send(`📢 **Broadcast**: ${broadcastMsg}`).catch(console.error);
+                    successCount++;
+                }
+            });
+            return message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);     
+        }
     }
 
-    // --- LOGIKA XP & COMMAND LAINNYA ---
+    // === KELOMPOK OPERATIONS BACKGROUND: LOGIKA XP & MESSAGE COUNTER ===
+    // (Berjalan untuk chat biasa DAN kelompok command utilitas di bawah agar tetap dapat XP sesuai desain aslimu)
     if (!data.messages) data.messages = {};
     data.messages[message.author.id] = (data.messages[message.author.id] || 0) + 1;
     if (!data.xp) data.xp = {};
@@ -438,229 +421,217 @@ if (command === 'status') { // <--- ini diganti dari (message.content === '!stat
         message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${data.xp[message.author.id].level}**! ✨`);
     }
     await saveData(data);
-    
-    if (message.content === '!ping') return message.reply('Pong! 🏓');
-    if (message.content === '!halo') return message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
-    if (message.content === '!gabutnih') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
-    
-    if (message.content === '!rank') {
-        const userXP = data.xp[message.author.id] || { xp: 0, level: 1 };
-        return message.reply(`📊 **Status Mocals Bot**\nLevel: **${userXP.level}**\nXP: **${userXP.xp}**`);
-    }
 
-    if (message.content.startsWith('!duel')) {
-        const lawan = message.mentions.members.first();
-        if (!lawan) return message.reply('Tag dulu lawanmu!');
-        if (lawan.user.bot) return message.reply('Bot tidak bisa diajak duel! 🤖');
-        if (lawan.id === message.author.id) return message.reply('Masa duel sama diri sendiri? 😅');
-
-        const menang = Math.random() < 0.5 ? message.author.username : lawan.user.username;
-        const kalah = menang === message.author.username ? lawan.user.username : message.author.username;
+    // === KELOMPOK COMMAND 2: UTILITY & ECONOMY (DAPAT XP) ===
+    if (isCommand) {
+        if (command === 'ping') return message.reply('Pong! 🏓');
+        if (command === 'halo') return message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
+        if (command === 'gabutnih') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
         
-        message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}** untuk duel maut!`);
-        setTimeout(() => message.channel.send(`💥 JLEB! Pertarungan berlangsung sengit...`), 1500);
-        return setTimeout(() => message.channel.send(`🏆 Hasilnya: **${menang}** berhasil mengalahkan **${kalah}**!`), 3500);
-    }
+        if (command === 'rank') {
+            const userXP = data.xp[message.author.id] || { xp: 0, level: 1 };
+            return message.reply(`📊 **Status Mocals Bot**\nLevel: **${userXP.level}**\nXP: **${userXP.xp}**`);
+        }
 
-    if (message.content.startsWith('!8ball')) {
-        const q = message.content.slice(7);
-        const ans = ['Ya, tentu saja! ✨', 'Sepertinya tidak...', 'Mungkin nanti.', 'Jangan harap.', 'Tentu saja! 🍀', 'Tidak mungkin.'];
-        return message.reply(`🎱 **Pertanyaan**: ${q || 'kosong'}\n**Jawaban**: ${ans[Math.floor(Math.random() * ans.length)]}`);
-    }
+        if (command === 'duel') {
+            const lawan = message.mentions.members.first();
+            if (!lawan) return message.reply('Tag dulu lawanmu!');
+            if (lawan.user.bot) return message.reply('Bot tidak bisa diajak duel! 🤖');
+            if (lawan.id === message.author.id) return message.reply('Masa duel sama diri sendiri? 😅');
 
-    if (message.content === '!coinflip') {
-        const hasil = Math.random() < 0.5 ? 'Kepala (Heads)' : 'Ekor (Tails)';
-        return message.reply(`🪙 Hasil coin flip adalah: **${hasil}**`);
-    }
-    
-    if (message.content.startsWith('!remind')) {
-        const args = message.content.split(' ');
-        const waktu = parseInt(args[1]);
-        const pesan = args.slice(2).join(' ');
-        if (!waktu || !pesan) return message.reply('Remind buat apatu?? Contoh: !remind 60 belajar (60 itu 1 menit yah)');
-        message.reply(`✅ Oke, diingatkan dalam ${waktu} detik.`);
-        return setTimeout(() => message.channel.send(`⏰ ${message.author}, pengingat: **${pesan}**`), waktu * 1000);
-    }
+            const menang = Math.random() < 0.5 ? message.author.username : lawan.user.username;
+            const kalah = menang === message.author.username ? lawan.user.username : message.author.username;
+            
+            message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}** untuk duel maut!`);
+            setTimeout(() => message.channel.send(`💥 JLEB! Pertarungan berlangsung sengit...`), 1500);
+            return setTimeout(() => message.channel.send(`🏆 Hasilnya: **${menang}** berhasil mengalahkan **${kalah}**!`), 3500);
+        }
 
-    if (message.content.startsWith('!userinfo')) {
-        const member = message.mentions.members.first() || message.member;
-        const roles = member.roles.cache.filter(r => r.id !== message.guild.id).map(r => `<@&${r.id}>`).join(', ') || 'Tidak ada';
-        const joinedDays = Math.floor((new Date() - member.joinedAt) / (1000 * 60 * 60 * 24 * 365));
-        return message.reply({
-            embeds: [new EmbedBuilder()
-                .setColor(0x00FF00)
-                .setTitle(`👤 Informasi User: ${member.user.username}`)
-                .setThumbnail(member.user.displayAvatarURL())
-                .addFields(
-                    { name: 'ID', value: `\`${member.id}\``, inline: true },
-                    { name: 'Bergabung di Server', value: `${joinedDays} years ago`, inline: true },
-                    { name: 'Total Pesan', value: `\`${data.messages?.[member.id] || 0}\``, inline: true },
-                    { name: 'Roles', value: roles }
-                )
-            ]
-        });
-    }
+        if (command === '8ball') {
+            const q = args.join(' ');
+            const ans = ['Ya, tentu saja! ✨', 'Sepertinya tidak...', 'Mungkin nanti.', 'Jangan harap.', 'Tentu saja! 🍀', 'Tidak mungkin.'];
+            return message.reply(`🎱 **Pertanyaan**: ${q || 'kosong'}\n**Jawaban**: ${ans[Math.floor(Math.random() * ans.length)]}`);
+        }
 
-    if (message.content === '!serverinfo') {
-        const { guild } = message;
-        return message.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setColor(0x0099FF)
-                    .setTitle(`🏠 Info Server: ${guild.name}`)
+        if (command === 'coinflip') {
+            const hasil = Math.random() < 0.5 ? 'Kepala (Heads)' : 'Ekor (Tails)';
+            return message.reply(`🪙 Hasil coin flip adalah: **${hasil}**`);
+        }
+        
+        if (command === 'remind') {
+            const waktu = parseInt(args[0]);
+            const pesan = args.slice(1).join(' ');
+            if (!waktu || !pesan) return message.reply('Remind buat apatu?? Contoh: !remind 60 belajar (60 itu 1 menit yah)');
+            message.reply(`✅ Oke, diingatkan dalam ${waktu} detik.`);
+            return setTimeout(() => message.channel.send(`⏰ ${message.author}, pengingat: **${pesan}**`), waktu * 1000);
+        }
+
+        if (command === 'userinfo') {
+            const member = message.mentions.members.first() || message.member;
+            const roles = member.roles.cache.filter(r => r.id !== message.guild.id).map(r => `<@&${r.id}>`).join(', ') || 'Tidak ada';
+            const joinedYears = Math.floor((new Date() - member.joinedAt) / (1000 * 60 * 60 * 24 * 365));
+            return message.reply({
+                embeds: [new EmbedBuilder()
+                    .setColor(0x00FF00)
+                    .setTitle(`👤 Informasi User: ${member.user.username}`)
+                    .setThumbnail(member.user.displayAvatarURL())
                     .addFields(
-                        { name: 'Total Member', value: `\`${guild.memberCount}\``, inline: true },
-                        { name: 'Dibuat pada', value: guild.createdAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), inline: true }
+                        { name: 'ID', value: `\`${member.id}\``, inline: true },
+                        { name: 'Bergabung di Server', value: `${joinedYears} years ago`, inline: true },
+                        { name: 'Total Pesan', value: `\`${data.messages?.[member.id] || 0}\``, inline: true },
+                        { name: 'Roles', value: roles }
                     )
-            ]
-       });
-    }
-
-    if (message.content === '!teshbd' && message.member.permissions.has('Administrator')) {
-        const hbdRoleId = '1509897738215624744';
-        if (!message.member.roles.cache.has(hbdRoleId)) {
-            message.member.roles.add(hbdRoleId).catch(console.error);
-        }
-        message.channel.send(`🎉 (TEST) Selamat ulang tahun ${message.author}! Semoga harimu menyenangkan! 🎂`);
-        return setTimeout(() => {
-            message.member.roles.remove(hbdRoleId).catch(console.error);
-            message.channel.send(`⏱️ (TEST) Role HBD telah dihapus dari ${message.author}.`);
-        }, 5000);
-    }
-
-    if (message.content.startsWith('!sethbd')) {
-        const args = message.content.split(' ');
-        const tgl = args[1];
-        const dateRegex = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])$/;
-
-        if (!tgl || !dateRegex.test(tgl)) {
-            return message.reply('❌ Format salah! Gunakan format `DD-MM`. Contoh: `!sethbd 10-05`');
+                ]
+            });
         }
 
-        if (!data.hbd) data.hbd = {};
-        data.hbd[message.author.id] = tgl;
-        await saveData(data);
-        return message.reply('✅ Tanggal ultah disimpan!');
-    }
-
-    // --- EKONOMI ---
-    if (!data.economy) data.economy = {};
-    if (message.content === '!money') {
-        const user = data.economy[message.author.id] || { money: 0 };
-        return message.reply(`💰 Saldo kamu saat ini: **${user.money}**`);
-    }
-
-    if (message.content === '!reject') {
-        const duel = activeDuels[message.author.id];
-        if (!duel) return message.reply('Kamu tidak sedang ditantang!');
-        delete activeDuels[message.author.id];
-        return message.channel.send(`🚫 ${message.author} menolak tantangan duel!`);
-    }
-
-    if (message.content === '!work') {
-        const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
-        const now = Date.now();
-        if (now - user.lastWork < 300000) {
-            return message.reply('⏳ Kamu capek! Istirahat dulu 5 menit.');
+        if (command === 'serverinfo') {
+            const { guild } = message;
+            return message.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor(0x0099FF)
+                        .setTitle(`🏠 Info Server: ${guild.name}`)
+                        .addFields(
+                            { name: 'Total Member', value: `\`${guild.memberCount}\``, inline: true },
+                            { name: 'Dibuat pada', value: guild.createdAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), inline: true }
+                        )
+                ]
+            });
         }
-        
-        const reward = Math.floor(Math.random() * 500) + 100;
-        user.money += reward;
-        user.lastWork = now; 
-        data.economy[message.author.id] = user;
-        await saveData(data);
-        return message.reply(`💼 Kamu bekerja dan mendapatkan **${reward}**!`);
-    }
 
-    if (message.content.startsWith('!gamble')) {
-        const amount = parseInt(message.content.split(' ')[1]);
-        const user = data.economy[message.author.id];
-        if (!user || user.money < amount) return message.reply('❌ Uang kamu tidak cukup!');
-        if (!amount || amount <= 0) return message.reply('Masukkan jumlah yang benar!');
-
-        const win = Math.random() < 0.45;
-        if (win) {
-            user.money += amount;
-            message.reply(`🎰 Menang! Kamu dapat **${amount}**. Saldo: ${user.money}`);
-        } else {
-            user.money -= amount;
-            message.reply(`💸 Kalah! Kamu kehilangan **${amount}**. Saldo: ${user.money}`);
-        }
-        data.economy[message.author.id] = user;
-        await saveData(data);
-        return;
-    }
-
-    if (message.content.startsWith('!bit')) {
-        const args = message.content.split(' ');
-        const lawan = message.mentions.members.first();
-        const jumlah = parseInt(args[2]);
-        
-        if (!lawan || !jumlah) return message.reply('Format: !bit @user [jumlah]');
-        if (lawan.id === message.author.id) return message.reply('Gak bisa lawan diri sendiri!');
-        if (activeDuels[lawan.id]) return message.reply('Lawan sedang ditantang orang lain, tunggu ya!');
-        activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
-        message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} sebesar **${jumlah}**! Ketik \`!confirm\` atau \`!reject\` dalam 1 menit.`);
-        return setTimeout(() => {
-            if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
-                delete activeDuels[lawan.id];
-                message.channel.send(`⏳ Tantangan dari ${message.author} untuk ${lawan} telah dibatalkan karena tidak direspons.`);
+        if (command === 'teshbd' && message.member.permissions.has('Administrator')) {
+            const hbdRoleId = '1509897738215624744';
+            if (!message.member.roles.cache.has(hbdRoleId)) {
+                message.member.roles.add(hbdRoleId).catch(console.error);
             }
-        }, 60000);
-    }
-
-    if (message.content === '!confirm') {
-        const duel = activeDuels[message.author.id];
-        if (!duel) return message.reply('Kamu tidak sedang ditantang!');
-        const menangId = Math.random() < 0.5 ? message.author.id : duel.penantang;
-        const kalahId = menangId === message.author.id ? duel.penantang : message.author.id;
-        if (!data.economy[menangId]) data.economy[menangId] = { money: 0 };
-        if (!data.economy[kalahId]) data.economy[kalahId] = { money: 0 };
-        data.economy[menangId].money += duel.jumlah;
-        data.economy[kalahId].money -= duel.jumlah;
-        await saveData(data);
-        message.channel.send(`🏆 Pertarungan selesai! Pemenangnya adalah <@${menangId}> dan mendapatkan **${duel.jumlah}**!`);
-        delete activeDuels[message.author.id];
-        return;
-    }
-
-    if (message.content.startsWith('!givecash')) {
-        const penerima = message.mentions.members.first();
-        const jumlah = parseInt(message.content.split(' ')[2]);
-        if (!penerima || !jumlah) return message.reply('Format: !givecash @user [jumlah]');
-        if (!data.economy[message.author.id] || data.economy[message.author.id].money < jumlah) return message.reply('Uang tidak cukup!');
-        data.economy[message.author.id].money -= jumlah;
-        if (!data.economy[penerima.id]) data.economy[penerima.id] = { money: 0, lastWork: 0 };
-        data.economy[penerima.id].money += jumlah;
-        await saveData(data);
-        return message.reply(`✅ Berhasil mengirim ${jumlah} ke ${penerima}!`);
-    }
-
-    if (message.content === '!leaderboard') {
-        const sorted = Object.entries(data.economy)
-            .sort((a, b) => b[1].money - a[1].money)
-            .slice(0, 5);
-        let text = '🏆 **Top 5 Orang Terkaya**:\n';
-        for (let i = 0; i < sorted.length; i++) {
-            text += `${i+1}. <@${sorted[i][0]}>: **${sorted[i][1].money}**\n`;
+            message.channel.send(`🎉 (TEST) Selamat ulang tahun ${message.author}! Semoga harimu menyenangkan! 🎂`);
+            return setTimeout(() => {
+                message.member.roles.remove(hbdRoleId).catch(console.error);
+                message.channel.send(`⏱️ (TEST) Role HBD telah dihapus dari ${message.author}.`);
+            }, 5000);
         }
-        return message.reply(text);
-    }
 
-    // === PERBAIKAN 2: PINDAHKAN MENTION BOT KE POSISI PALING BAWAH ===
-    // Sekarang pengecekan mention hanya berjalan jika pesan tersebut BUKAN perintah apa pun di atas.
-    if (message.mentions.has(client.user.id)) {
-        const helpEmbed = new EmbedBuilder()
-            .setColor(0x00FF00) 
-            .setTitle('📚 Pusat Bantuan Mocals Chan')
-            .setDescription(
-                "Haloo ada yang bisa mocals bantu?? kalo ada, kamu bisa melihat list command berikut dan apa yang bisa mocals chan bantu:\n\n" +
-                "!help - Menampilkan semua command\n" +
-                "!status - Cek status bot\n" +
-                "!info - Informasi lebih lanjut"
-            )
-            .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
-        return message.reply({ embeds: [helpEmbed] }); 
+        if (command === 'sethbd') {
+            const tgl = args[0];
+            const dateRegex = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])$/;
+
+            if (!tgl || !dateRegex.test(tgl)) {
+                return message.reply('❌ Format salah! Gunakan format `DD-MM`. Contoh: `!sethbd 10-05`');
+            }
+            if (!data.hbd) data.hbd = {};
+            data.hbd[message.author.id] = tgl;
+            await saveData(data);
+            return message.reply('✅ Tanggal ultah disimpan!');
+        }
+
+        // --- SISTEM EKONOMI ---
+        if (command === 'money') {
+            if (!data.economy) data.economy = {};
+            const user = data.economy[message.author.id] || { money: 0 };
+            return message.reply(`💰 Saldo kamu saat ini: **${user.money}**`);
+        }
+
+        if (command === 'reject') {
+            const duel = activeDuels[message.author.id];
+            if (!duel) return message.reply('Kamu tidak sedang ditantang!');
+            delete activeDuels[message.author.id];
+            return message.channel.send(`🚫 ${message.author} menolak tantangan duel!`);
+        }
+
+        if (command === 'work') {
+            if (!data.economy) data.economy = {};
+            const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
+            const now = Date.now();
+            if (now - user.lastWork < 300000) {
+                return message.reply('⏳ Kamu capek! Istirahat dulu 5 menit.');
+            }
+            
+            const reward = Math.floor(Math.random() * 500) + 100;
+            user.money += reward;
+            user.lastWork = now; 
+            data.economy[message.author.id] = user;
+            await saveData(data);
+            return message.reply(`💼 Kamu bekerja dan mendapatkan **${reward}**!`);
+        }
+
+        if (command === 'gamble') {
+            const amount = parseInt(args[0]);
+            if (!data.economy) data.economy = {};
+            const user = data.economy[message.author.id];
+            if (!user || user.money < amount) return message.reply('❌ Uang kamu tidak cukup!');
+            if (!amount || amount <= 0) return message.reply('Masukkan jumlah yang benar!');
+
+            const win = Math.random() < 0.45;
+            if (win) {
+                user.money += amount;
+                message.reply(`🎰 Menang! Kamu dapat **${amount}**. Saldo: ${user.money}`);
+            } else {
+                user.money -= amount;
+                message.reply(`💸 Kalah! Kamu kehilangan **${amount}**. Saldo: ${user.money}`);
+            }
+            data.economy[message.author.id] = user;
+            await saveData(data);
+            return;
+        }
+
+        if (command === 'bit') {
+            const lawan = message.mentions.members.first();
+            const jumlah = parseInt(args[1]);
+            
+            if (!lawan || !jumlah) return message.reply('Format: !bit @user [jumlah]');
+            if (lawan.id === message.author.id) return message.reply('Gak bisa lawan diri sendiri!');
+            if (activeDuels[lawan.id]) return message.reply('Lawan sedang ditantang orang lain, tunggu ya!');
+            activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
+            message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} sebesar **${jumlah}**! Ketik \`!confirm\` atau \`!reject\` dalam 1 menit.`);
+            return setTimeout(() => {
+                if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
+                    delete activeDuels[lawan.id];
+                    message.channel.send(`⏳ Tantangan dari ${message.author} untuk ${lawan} telah dibatalkan karena tidak direspons.`);
+                }
+            }, 60000);
+        }
+
+        if (command === 'confirm') {
+            const duel = activeDuels[message.author.id];
+            if (!duel) return message.reply('Kamu tidak sedang ditantang!');
+            const menangId = Math.random() < 0.5 ? message.author.id : duel.penantang;
+            const kalahId = menangId === message.author.id ? duel.penantang : message.author.id;
+            if (!data.economy) data.economy = {};
+            if (!data.economy[menangId]) data.economy[menangId] = { money: 0 };
+            if (!data.economy[kalahId]) data.economy[kalahId] = { money: 0 };
+            data.economy[menangId].money += duel.jumlah;
+            data.economy[kalahId].money -= duel.jumlah;
+            await saveData(data);
+            message.channel.send(`🏆 Pertarungan selesai! Pemenangnya adalah <@${menangId}> dan mendapatkan **${duel.jumlah}**!`);
+            delete activeDuels[message.author.id];
+            return;
+        }
+
+        if (command === 'givecash') {
+            const penerima = message.mentions.members.first();
+            const jumlah = parseInt(args[1]);
+            if (!penerima || !jumlah) return message.reply('Format: !givecash @user [jumlah]');
+            if (!data.economy) data.economy = {};
+            if (!data.economy[message.author.id] || data.economy[message.author.id].money < jumlah) return message.reply('Uang tidak cukup!');
+            data.economy[message.author.id].money -= jumlah;
+            if (!data.economy[penerima.id]) data.economy[penerima.id] = { money: 0, lastWork: 0 };
+            data.economy[penerima.id].money += jumlah;
+            await saveData(data);
+            return message.reply(`✅ Berhasil mengirim ${jumlah} ke ${penerima}!`);
+        }
+
+        if (command === 'leaderboard') {
+            if (!data.economy) data.economy = {};
+            const sorted = Object.entries(data.economy)
+                .sort((a, b) => (b[1].money || 0) - (a[1].money || 0))
+                .slice(0, 5);
+            let text = '🏆 **Top 5 Orang Terkaya**:\n';
+            for (let i = 0; i < sorted.length; i++) {
+                text += `${i+1}. <@${sorted[i][0]}>: **${sorted[i][1].money || 0}**\n`;
+            }
+            return message.reply(text);
+        }
     }
 });
 
