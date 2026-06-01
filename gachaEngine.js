@@ -63,4 +63,33 @@ async function rollGachaMALResmi() {
     }
 }
 
-module.exports = { rollGachaMALResmi };
+/**
+ * Fungsi khusus Black Market: Menjamin Rarity Bagus Tinggi
+ * Rate: SR (70%), SSR (30%)
+ */
+function tentukanRarityBagus() {
+    return Math.random() * 100 < 30 ? 'SSR' : 'SR';
+}
+
+/**
+ * Menghasilkan kartu acak khusus dengan jaminan Rarity tinggi
+ */
+async function rollKartuBagus() {
+    try {
+        const response = await axios.get('https://api.jikan.moe/v4/random/characters');
+        const character = response.data?.data;
+        if (!character || !character.mal_id) return null;
+
+        return {
+            id: character.mal_id,
+            name: character.name,
+            rarity: tentukanRarityBagus(), // Jaminan SR/SSR
+            favorites: character.favorites || 0
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+// UPDATE module.exports kamu di paling bawah menjadi seperti ini:
+module.exports = { rollGachaMALResmi, rollKartuBagus };
