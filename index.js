@@ -254,7 +254,7 @@ client.on('messageCreate', async (message) => {
         { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
         { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
         { name: '🆔 ID MAL (Buat Jual)', value: `\`${hasil.id}\``, inline: true },
-        { name: '❤️ MAL Favorites', value: `👤 **${hasil.malRank} User**`, inline: true }, // 👈 DIUBAH JADI INI
+        { name: '❤️ MAL Favorites', value: `👤 **${hasil.malRank} User**`, inline: true },
         { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
     )
     .setImage(hasil.image)
