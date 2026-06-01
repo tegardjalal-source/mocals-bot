@@ -682,43 +682,60 @@ client.on('messageCreate', async (message) => {
             return destChannel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
         }
 
-        // === COMMAND !TOPCOLLECTOR ===
-        if (command === 'topcollector') {
-            if (!data.economy) data.economy = {};
+        // === COMMAND !TOPCOLLECTOR (VERSI TOP 5 CARD RARITY) ===
+if (command === 'topcollector') {
+    if (!data.economy) data.economy = {};
 
-            const listCollector = Object.entries(data.economy)
-                .map(([id, profile]) => {
-                    let totalKartu = 0;
-                    if (profile.cards && Array.isArray(profile.cards)) {
-                        totalKartu = profile.cards.reduce((acc, curr) => acc + (curr.count || 1), 0);
-                    }
-                    return { userId: id, total: totalKartu };
-                })
-                .filter(u => u.total > 0)
-                .sort((a, b) => b.total - a.total)
-                .slice(0, 10);
+    // Standarisasi urutan kasta kartu dari yang tertinggi ke terendah
+    const rarityOrder = { 'SSR': 1, 'SR': 2, 'R': 3, 'C': 4 };
 
-            if (listCollector.length === 0) {
-                return message.reply('📭 Belum ada kolektor kartu anime di server ini.');
+    const listCollector = Object.entries(data.economy)
+        .map(([id, profile]) => {
+            let totalKartu = 0;
+            let top5Cards = [];
+            
+            if (profile.cards && Array.isArray(profile.cards)) {
+                // 1. Hitung total seluruh kartu yang dimiliki player
+                totalKartu = profile.cards.reduce((acc, curr) => acc + (curr.count || 1), 0);
+                
+                // 2. Urutkan lemari kartu dari kasta tertinggi, lalu potong ambil 5 terbaik saja
+                top5Cards = [...profile.cards]
+                    .sort((a, b) => (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5))
+                    .slice(0, 5);
             }
+            return { userId: id, total: totalKartu, top5: top5Cards };
+        })
+        .filter(u => u.total > 0)
+        .sort((a, b) => b.total - a.total) // Tetap diurutkan berdasarkan total koleksi terbanyak
+        .slice(0, 10);
 
-            let descriptionText = '';
-            const trophy = ['🥇', '🥈', '🥉', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅'];
+    if (listCollector.length === 0) {
+        return message.reply('📭 Belum ada kolektor kartu anime di server ini.');
+    }
 
-            listCollector.forEach((user, index) => {
-                descriptionText += `${trophy[index]} **Peringkat ${index + 1}** • <@${user.userId}>\n┗ Total Koleksi: **${user.total} Kartu**\n\n`;
-            });
+    let descriptionText = '';
+    const trophy = ['🥇', '🥈', '🥉', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅'];
 
-            const collectorEmbed = new EmbedBuilder()
-                .setColor('#00aaff')
-                .setTitle('🏆 HALL OF FAME: TOP 10 ANIME CARD COLLECTORS')
-                .setDescription(descriptionText)
-                .setTimestamp()
-                .setFooter({ text: 'Mocals Chan Gacha League • Terus kumpulkan waifumu! ✨' });
+    listCollector.forEach((user, index) => {
+        // Gabungkan top 5 kartu menjadi deretan teks horizontal agar hemat space embed
+        const topCardsText = user.top5
+            .map(c => `**${c.name}** (\`${c.rarity}\`)`)
+            .join(', ');
 
-            return message.reply({ embeds: [collectorEmbed] });
-        }
+        descriptionText += `${trophy[index]} **Peringkat ${index + 1}** • <@${user.userId}>\n`;
+        descriptionText += `┣ Total Koleksi: **${user.total} Kartu**\n`;
+        descriptionText += `┗ **Top 5**: ${topCardsText || 'Belum memiliki koleksi'}\n\n`;
+    });
 
+    const collectorEmbed = new EmbedBuilder()
+        .setColor('#00aaff')
+        .setTitle('🏆 HALL OF FAME: TOP 10 ANIME CARD COLLECTORS')
+        .setDescription(descriptionText)
+        .setTimestamp()
+        .setFooter({ text: 'Mocals Chan Gacha League • Terus kumpulkan waifumu! ✨' });
+
+    return message.reply({ embeds: [collectorEmbed] });
+}
         // === COMMAND !COLLECTION ===
         if (command === 'collection') {
             const targetMember = message.mentions.members.first() || message.member;
