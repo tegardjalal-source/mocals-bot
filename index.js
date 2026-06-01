@@ -405,7 +405,7 @@ client.on('messageCreate', async (message) => {
                 
                 const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
                 if (sudahPunya) {
-                    alreadyPunya = sudahPunya.count += 1;
+                    sudahPunya = sudahPunya.count += 1;
                 } else {
                     userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
                 }
