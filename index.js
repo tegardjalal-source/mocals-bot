@@ -181,7 +181,7 @@ client.on('messageCreate', async (message) => {
                     { name: '💰 Ekonomi', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>', inline: false },
                     { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
                     { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false },
-                    { name: '🔮 Gacha Anime', value: '!gacha (Sekali roll $500)', inline: false }
+                    { name: '🔮 Gacha & Market Anime', value: '!gacha (Roll $500), !sellcard [ID_MAL] [Harga], !buycard [Kode_Listing], !topcollector', inline: false }
                 )
                 .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
             return message.reply({ embeds: [helpEmbed] });
@@ -215,7 +215,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [infoEmbed] });
         }
 
-        // === FITUR GACHA (SUDAH DISINKRONKAN DENGAN BOT ECONOMY) ===
+        // === FITUR GACHA (SINKRON DENGAN DANA ECONOMY & MENAMPILKAN ID MAL) ===
         if (command === 'gacha') {
             const hargaGacha = 500; 
             const userId = message.author.id;
@@ -253,6 +253,7 @@ client.on('messageCreate', async (message) => {
                     .addFields(
                         { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
                         { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
+                        { name: '🆔 ID MAL (Buat Jual)', value: `\`${hasil.id}\``, inline: true },
                         { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
                     )
                     .setImage(hasil.image)
@@ -266,7 +267,166 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // --- MANAJEMEN YOUTUBE ---
+        // === COMMAND !SELLCARD ===
+        if (command === 'sellcard') {
+            const cardId = parseInt(args[0]);
+            const hargaJual = parseInt(args[1]);
+            const userId = message.author.id;
+
+            if (!cardId || isNaN(hargaJual) || hargaJual <= 0) {
+                return message.reply('✖️ Format salah! Gunakan: `!sellcard [ID_MAL] [Harga]`\nContoh: `!sellcard 31254 1500`');
+            }
+
+            if (!data.economy) data.economy = {};
+            if (!data.economy[userId]) data.economy[userId] = { money: 0, cards: [] };
+            const userWallet = data.economy[userId];
+
+            if (!userWallet.cards || userWallet.cards.length === 0) {
+                return message.reply('✖️ Lu belum punya kartu karakter sama sekali untuk dijual.');
+            }
+
+            const indexKartu = userWallet.cards.findIndex(c => c.id === cardId);
+            if (indexKartu === -1) {
+                return message.reply('✖️ Kartu dengan ID MAL tersebut gak ada di inventori lu.');
+            }
+
+            const kartu = userWallet.cards[indexKartu];
+
+            if (kartu.count > 1) {
+                kartu.count -= 1;
+            } else {
+                userWallet.cards.splice(indexKartu, 1);
+            }
+
+            if (!data.market) data.market = [];
+            const listingId = Date.now().toString().slice(-6); 
+
+            data.market.push({
+                listingId: listingId,
+                sellerId: userId,
+                sellerName: message.author.username,
+                id: kartu.id,
+                name: kartu.name,
+                rarity: kartu.rarity,
+                price: hargaJual
+            });
+
+            await saveData(data);
+
+            const sellEmbed = new EmbedBuilder()
+                .setColor('#ffaa00')
+                .setTitle('🛒 KARTU BERHASIL DIPASARKAN!')
+                .setDescription(`<@${userId}> memasang kartu ke toko market bursa!`)
+                .addFields(
+                    { name: '📦 Nama Karakter', value: `**${kartu.name}** (${kartu.rarity})`, inline: true },
+                    { name: '🆔 ID MAL Karakter', value: `\`${kartu.id}\``, inline: true },
+                    { name: '🎫 Kode Listing Toko', value: `\`${listingId}\``, inline: true },
+                    { name: '💰 Value Harga', value: `**$${hargaJual}**`, inline: false }
+                )
+                .setFooter({ text: 'Gunakan "!buycard [Kode_Listing]" untuk membeli kartu ini!' });
+
+            return message.reply({ embeds: [sellEmbed] });
+        }
+
+        // === COMMAND !BUYCARD ===
+        if (command === 'buycard') {
+            const listingId = args[0];
+            const buyerId = message.author.id;
+
+            if (!listingId) {
+                return message.reply('✖️ Masukkan kode listing toko! Format: `!buycard [Kode_Listing]`');
+            }
+
+            if (!data.market || data.market.length === 0) {
+                return message.reply('✖️ Bursa pasar kartu saat ini lagi kosong.');
+            }
+
+            const marketIndex = data.market.findIndex(item => item.listingId === listingId);
+            if (marketIndex === -1) {
+                return message.reply('✖️ Kode listing toko tidak ditemukan atau kartu sudah laku terjual.');
+            }
+
+            const itemGacha = data.market[marketIndex];
+
+            if (itemGacha.sellerId === buyerId) {
+                return message.reply('✖️ Lu gak bisa beli kartu bikinan lu sendiri kocak!');
+            }
+
+            if (!data.economy) data.economy = {};
+            if (!data.economy[buyerId]) data.economy[buyerId] = { money: 0, cards: [] };
+            const buyerWallet = data.economy[buyerId];
+
+            if (buyerWallet.money < itemGacha.price) {
+                return message.reply(`✖️ Duit lu kurang! Harga kartu ini **$${itemGacha.price}**, tabungan lu cuma **$${buyerWallet.money}**.`);
+            }
+
+            buyerWallet.money -= itemGacha.price;
+
+            if (!data.economy[itemGacha.sellerId]) data.economy[itemGacha.sellerId] = { money: 0, cards: [] };
+            data.economy[itemGacha.sellerId].money += itemGacha.price;
+
+            if (!buyerWallet.cards) buyerWallet.cards = [];
+            const sudahPunya = buyerWallet.cards.find(c => c.id === itemGacha.id);
+            if (sudahPunya) {
+                sudahPunya.count += 1;
+            } else {
+                buyerWallet.cards.push({ id: itemGacha.id, name: itemGacha.name, rarity: itemGacha.rarity, count: 1 });
+            }
+
+            data.market.splice(marketIndex, 1);
+            await saveData(data);
+
+            const buyEmbed = new EmbedBuilder()
+                .setColor('#00ff55')
+                .setTitle('🤝 TRANSAKSI MARKET BERHASIL!')
+                .setDescription(`<@${buyerId}> telah membeli kartu milik **${itemGacha.sellerName}**!`)
+                .addFields(
+                    { name: '🛒 Karakter Dibeli', value: `**${itemGacha.name}** [${itemGacha.rarity}]`, inline: true },
+                    { name: '💸 Dana Terpotong', value: `**$${itemGacha.price}**`, inline: true },
+                    { name: '💰 Sisa Uangmu', value: `**$${buyerWallet.money}**`, inline: false }
+                );
+
+            return message.reply({ embeds: [buyEmbed] });
+        }
+
+        // === COMMAND !TOPCOLLECTOR ===
+        if (command === 'topcollector') {
+            if (!data.economy) data.economy = {};
+
+            const listCollector = Object.entries(data.economy)
+                .map(([id, profile]) => {
+                    let totalKartu = 0;
+                    if (profile.cards && Array.isArray(profile.cards)) {
+                        totalKartu = profile.cards.reduce((acc, curr) => acc + (curr.count || 1), 0);
+                    }
+                    return { userId: id, total: totalKartu };
+                })
+                .filter(u => u.total > 0)
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 10);
+
+            if (listCollector.length === 0) {
+                return message.reply('📭 Belum ada kolektor kartu anime di server ini.');
+            }
+
+            let descriptionText = '';
+            const trophy = ['🥇', '🥈', '🥉', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅'];
+
+            listCollector.forEach((user, index) => {
+                descriptionText += `${trophy[index]} **Peringkat ${index + 1}** • <@${user.userId}>\n┗ Total Koleksi: **${user.total} Kartu**\n\n`;
+            });
+
+            const collectorEmbed = new EmbedBuilder()
+                .setColor('#00aaff')
+                .setTitle('🏆 HALL OF FAME: TOP 10 ANIME CARD COLLECTORS')
+                .setDescription(descriptionText)
+                .setTimestamp()
+                .setFooter({ text: 'Mocals Chan Gacha League • Terus kumpulkan waifumu! ✨' });
+
+            return message.reply({ embeds: [collectorEmbed] });
+        }
+
+        // --- MANAJEMEN YOUTUBE NOTIF ---
         if (command === 'setchannelnotif' && message.member.permissions.has('Administrator')) {
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya!');
@@ -408,7 +568,6 @@ client.on('messageCreate', async (message) => {
     }
 
     // === KELOMPOK OPERATIONS BACKGROUND: LOGIKA XP & MESSAGE COUNTER ===
-    // (Berjalan untuk chat biasa DAN kelompok command utilitas di bawah agar tetap dapat XP sesuai desain aslimu)
     if (!data.messages) data.messages = {};
     data.messages[message.author.id] = (data.messages[message.author.id] || 0) + 1;
     if (!data.xp) data.xp = {};
