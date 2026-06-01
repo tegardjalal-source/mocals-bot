@@ -738,7 +738,7 @@ client.on('messageCreate', async (message) => {
 
             let collectionText = '';
             sortedCards.forEach((kartu, index) => {
-                collectionText += `**${index + 1}. ${kartu.name}**\n┣ ✨ Rarity: \`${kartu.rarity}\` | 🆔 ID MAL: \`${kartu.id}\`\n┗ 📦 Jumlah: **x${kartu.count || 1}**\n\n`;
+            collectionText += `**${index + 1}. ${kartu.name}** • \`${kartu.rarity}\` • x${kartu.count || 1} *(ID: \`${kartu.id}\`)*\n`;
             });
 
             if (collectionText.length > 3900) {
