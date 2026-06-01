@@ -391,9 +391,10 @@ client.on('messageCreate', async (message) => {
                 
                 // Bot melakukan looping tarikan MAL maksimal 10x untuk mencari takdir kasta kartu yang sesuai keinginan player
                 for (let i = 0; i < 10; i++) {
-                    hasil = await rollGachaMALResmi();
+                    // 🛠️ SINKRONISASI AKTIF: Sekarang meneruskan variabel 'command' agar gachaEngine langsung menembak kolam Top Karakter MAL
+                    hasil = await rollGachaMALResmi(command); 
                     if (hasil.sukses && config.allowedRarity.includes(hasil.rarity)) {
-                        break; // Target terpenuhi, kunci takdir karakter!
+                        break; // Target kasta terpenuhi, kunci takdir karakter!
                     }
                     await new Promise(resolve => setTimeout(resolve, 1200)); // Jeda aman anti rate-limit API
                 }
@@ -703,6 +704,94 @@ client.on('messageCreate', async (message) => {
 
             await loadingBM.delete();
             return destChannel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
+        }
+
+        // === COMMAND !TOPCOLLECTOR (VERSI TOP 5 CARD RARITY) ===
+        if (command === 'topcollector') {
+            if (!data.economy) data.economy = {};
+
+            const rarityOrder = { 'SSR': 1, 'SR': 2, 'R': 3, 'C': 4 };
+
+            const listCollector = Object.entries(data.economy)
+                .map(([id, profile]) => {
+                    let totalKartu = 0;
+                    let top5Cards = [];
+                    
+                    if (profile.cards && Array.isArray(profile.cards)) {
+                        totalKartu = profile.cards.reduce((acc, curr) => acc + (curr.count || 1), 0);
+                        
+                        top5Cards = [...profile.cards]
+                            .sort((a, b) => (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5))
+                            .slice(0, 5);
+                    }
+                    return { userId: id, total: totalKartu, top5: top5Cards };
+                })
+                .filter(u => u.total > 0)
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 10);
+
+            if (listCollector.length === 0) {
+                return message.reply('📭 Belum ada kolektor kartu anime di server ini.');
+            }
+
+            let descriptionText = '';
+            const trophy = ['🥇', '🥈', '🥉', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅', '🏅'];
+
+            listCollector.forEach((user, index) => {
+                const topCardsText = user.top5
+                    .map(c => `**${c.name}** (\`${c.rarity}\`)`)
+                    .join(', ');
+
+                descriptionText += `${trophy[index]} **Peringkat ${index + 1}** • <@${user.userId}>\n`;
+                descriptionText += `┣ Total Koleksi: **${user.total} Kartu**\n`;
+                descriptionText += `┗ **Top 5**: ${topCardsText || 'Belum memiliki koleksi'}\n\n`;
+            });
+
+            const collectorEmbed = new EmbedBuilder()
+                .setColor('#00aaff')
+                .setTitle('🏆 HALL OF FAME: TOP 10 ANIME CARD COLLECTORS')
+                .setDescription(descriptionText)
+                .setTimestamp()
+                .setFooter({ text: 'Mocals Chan Gacha League • Terus kumpulkan waifumu! ✨' });
+
+            return message.reply({ embeds: [collectorEmbed] });
+        }
+
+        // === COMMAND !COLLECTION ===
+        if (command === 'collection') {
+            const targetMember = message.mentions.members.first() || message.member;
+            const targetId = targetMember.id;
+
+            if (!data.economy) data.economy = {};
+            const targetWallet = data.economy[targetId];
+
+            if (!targetWallet || !targetWallet.cards || targetWallet.cards.length === 0) {
+                return message.reply(`📭 ${targetMember.user.username} belum memiliki koleksi kartu karakter anime sama sekali.`);
+            }
+
+            const rarityOrder = { 'SSR': 1, 'SR': 2, 'R': 3, 'C': 4 };
+            const sortedCards = [...targetWallet.cards].sort((a, b) => {
+                return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
+            });
+
+            let collectionText = '';
+            sortedCards.forEach((kartu, index) => {
+                collectionText += `**${index + 1}. ${kartu.name}** • \`${kartu.rarity}\` • x${kartu.count || 1} *(ID: \`${kartu.id}\`)*\n`;
+            });
+
+            if (collectionText.length > 3900) {
+                collectionText = collectionText.substring(0, 3850) + '\n*...dan beberapa kartu lainnya tidak termuat karena lemari koleksi penuh!*';
+            }
+
+            const collectionEmbed = new EmbedBuilder()
+                .setColor('#00ffbb')
+                .setTitle(`🗂️ Album Koleksi Anime: ${targetMember.user.username}`)
+                .setDescription(collectionText)
+                .setThumbnail(targetMember.user.displayAvatarURL())
+                .setTimestamp()
+                .setFooter({ text: `Mocals Chan Album League • Diminta oleh ${message.author.username}` });
+
+            return message.reply({ embeds: [collectionEmbed] });
         }
 
         // --- MANAJEMEN YOUTUBE NOTIF ---
