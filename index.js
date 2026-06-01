@@ -215,7 +215,7 @@ client.on('messageCreate', async (message) => {
                 "Haloo ada yang bisa mocals bantu?? kalo ada, kamu bisa melihat list command berikut and apa yang bisa mocals chan bantu:\n\n" +
                 "`!help` - Menampilkan semua command\n" +
                 "`!status` - Cek status bot\n" +
-                "`!info` - Informasi lebih lanjut" +
+                "`!info` - Informasi lebih lanjut\n" +
                 "`!gachainfo` - guide untuk market dan gacha waifu/husbando kalian! ✨"
             )
             .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
