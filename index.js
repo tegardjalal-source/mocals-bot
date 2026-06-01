@@ -3,8 +3,8 @@ const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('disco
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
-// Mengimpor fungsi gacha reguler dan gacha premium khusus bursa gelap
-const { rollGachaMALResmi, rollKartuBagus } = require('./gachaEngine');
+// Mengimpor Engine Baru Berbasis Akurasi Tingkat Hoki (Anti Rate-Limit)
+const { jalankanGacha } = require('./gachaEngine');
 
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -145,8 +145,9 @@ cron.schedule('0 0 * * *', async () => {
     console.log("🔄 Jam 00:00: Meriset barang di Black Market...");
     data.blackMarket = [];
 
+    // Mengambil 5 kartu random biasa untuk Black Market menggunakan engine baru
     for (let i = 0; i < 5; i++) {
-        const kartu = await rollGachaMALResmi();
+        const kartu = await jalankanGacha('biasa');
         if (kartu && kartu.sukses) {
             const hargaBM = Math.floor(Math.random() * 900) + 300; 
             data.blackMarket.push({
@@ -158,11 +159,12 @@ cron.schedule('0 0 * * *', async () => {
                 isPremium: false
             });
         }
-        await new Promise(resolve => setTimeout(resolve, 2000)); 
+        await new Promise(resolve => setTimeout(resolve, 1300)); // Jeda aman ringankan beban server
     }
 
-    const kartuSpesial = await rollKartuBagus();
-    if (kartuSpesial) {
+    // Mengambil 1 kartu Premium (Dijamin kasta tinggi SSR via Mega Luck)
+    const kartuSpesial = await jalankanGacha('megaluck');
+    if (kartuSpesial && kartuSpesial.sukses) {
         const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500; 
         data.blackMarket.push({
             listingId: `BM-PREM`,
@@ -363,7 +365,6 @@ client.on('messageCreate', async (message) => {
         }
 
         // 🔮 === CORE LOGIKA BARU: MULTI-TIER LUCK GACHA ENGINE SYSTEM === 🔮
-        // Menggunakan objek konfigurasi terpusat agar kode sangat bersih dan anti-duplikasi
         const gachaTiers = {
             'gacha': { name: 'Normal', price: 500, allowedRarity: ['C', 'R', 'SR', 'SSR'], text: 'bebas apa aja' },
             'gachaluck': { name: 'Luck', price: 3500, allowedRarity: ['R', 'SR', 'SSR'], text: 'minimal Rare (R)' },
@@ -387,21 +388,15 @@ client.on('messageCreate', async (message) => {
             const loadingMsg = await message.reply(`🔮 Menghubungi bursa MyAnimeList... Menyalakan ritual **${config.name} Roll** (${config.text})...`);
 
             try {
-                let hasil = null;
+                // SINKRONISASI FLUID: Mengonversi nama perintah chat menjadi nama parameter di Engine baru
+                const jenisEngine = command === 'gacha' ? 'biasa' : command.replace('gacha', '');
                 
-                // Bot melakukan looping tarikan MAL maksimal 10x untuk mencari takdir kasta kartu yang sesuai keinginan player
-                for (let i = 0; i < 10; i++) {
-                    // 🛠️ SINKRONISASI AKTIF: Sekarang meneruskan variabel 'command' agar gachaEngine langsung menembak kolam Top Karakter MAL
-                    hasil = await rollGachaMALResmi(command); 
-                    if (hasil.sukses && config.allowedRarity.includes(hasil.rarity)) {
-                        break; // Target kasta terpenuhi, kunci takdir karakter!
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1200)); // Jeda aman anti rate-limit API
-                }
+                // Panggil 1x saja! Tidak ada loop melelahkan yang merusak API di sini
+                const hasil = await jalankanGacha(jenisEngine); 
 
-                // Fallback darurat jika dalam 10x loop server MAL sibuk/gagal dapet kasta target
-                if (!hasil || !hasil.sukses || !config.allowedRarity.includes(hasil.rarity)) {
-                    return loadingMsg.edit(`✖️ Ritual hoki gagal karena gerbang koneksi server MyAnimeList sedang padat antrean. Saldo lu aman tidak terpotong, silakan dicoba sesaat lagi ya!`);
+                // Fallback proteksi darurat jika database internet error parah
+                if (!hasil || !hasil.sukses) {
+                    return loadingMsg.edit(`✖️ Gagal menarik takdir karakter dari MyAnimeList. Saldo lu aman tidak terpotong, coba lagi ya!`);
                 }
 
                 // Potong dana tabungan dan daftarkan kartu ke album player
@@ -410,7 +405,7 @@ client.on('messageCreate', async (message) => {
                 
                 const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
                 if (sudahPunya) {
-                    sudahPunya.count += 1;
+                    alreadyPunya = sudahPunya.count += 1;
                 } else {
                     userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
                 }
@@ -652,7 +647,7 @@ client.on('messageCreate', async (message) => {
             
             data.blackMarket = [];
             for (let i = 0; i < 5; i++) {
-                const kartu = await rollGachaMALResmi();
+                const kartu = await jalankanGacha('biasa'); // Menggunakan engine baru
                 if (kartu && kartu.sukses) {
                     const hargaBM = Math.floor(Math.random() * 900) + 300;
                     data.blackMarket.push({
@@ -664,11 +659,11 @@ client.on('messageCreate', async (message) => {
                         isPremium: false
                     });
                 }
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 1300));
             }
 
-            const kartuSpesial = await rollKartuBagus();
-            if (kartuSpesial) {
+            const kartuSpesial = await jalankanGacha('megaluck'); // Garansi SSR via Mega Luck
+            if (kartuSpesial && kartuSpesial.sukses) {
                 const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500;
                 data.blackMarket.push({
                     listingId: `BM-PREM`,
