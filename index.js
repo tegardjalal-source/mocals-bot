@@ -333,6 +333,37 @@ client.on('messageCreate', async (message) => {
         if (command === 'buycard') {
             const listingId = args[0];
             const buyerId = message.author.id;
+            // === COMMAND !MARKETLIST ===
+if (command === 'marketlist') {
+    if (!data.market || data.market.length === 0) {
+        return message.reply('📭 Bursa pasar kartu saat ini lagi kosong melompong. Belum ada yang jualan nih!');
+    }
+
+    let marketText = '';
+    
+    // Looping semua kartu yang sedang dipajang di market
+    data.market.forEach((item, index) => {
+        marketText += `**${index + 1}. ${item.name}** [${item.rarity}]\n`;
+        marketText += `┣ 🆔 ID MAL: \`${item.id}\`\n`;
+        marketText += `┣ 👤 Penjual: <@${item.sellerId}>\n`;
+        marketText += `┣ 💰 Harga: **$${item.price.toLocaleString('id-ID')}**\n`;
+        marketText += `┗ 🎫 Kode Beli: \`!buycard ${item.listingId}\`\n\n`;
+    });
+
+    // Batasi panjang teks embed agar tidak melebihi limit Discord (maksimal 4096 karakter)
+    if (marketText.length > 3900) {
+        marketText = marketText.substring(0, 3850) + '\n*...dan beberapa kartu lainnya tidak termuat karena bursa pasar terlalu penuh!*';
+    }
+
+    const marketListEmbed = new EmbedBuilder()
+        .setColor('#ffaa00')
+        .setTitle('🛒 BURSA PASAR KARTU ANIME (FOR SALE)')
+        .setDescription(marketText)
+        .setTimestamp()
+        .setFooter({ text: 'Mocals Chan Marketplace • Segera borong waifu idamanmu! ✨' });
+
+    return message.reply({ embeds: [marketListEmbed] });
+}
 
             if (!listingId) {
                 return message.reply('✖️ Masukkan kode listing toko! Format: `!buycard [Kode_Listing]`');
