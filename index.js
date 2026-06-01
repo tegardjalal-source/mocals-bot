@@ -427,6 +427,47 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [collectorEmbed] });
         }
 
+        // === !COLLECTION / !COLLECTION @USER ===
+           if (command === 'collection') {
+    // Jika user melakukan tag orang lain (!collection @User), bot akan melihat koleksi orang tersebut. 
+    // Jika tidak mengetik siapa-siapa (!collection), bot melihat koleksi miliknya sendiri.
+    const targetMember = message.mentions.members.first() || message.member;
+    const targetId = targetMember.id;
+
+    if (!data.economy) data.economy = {};
+    const targetWallet = data.economy[targetId];
+
+    if (!targetWallet || !targetWallet.cards || targetWallet.cards.length === 0) {
+        return message.reply(`📭 ${targetMember.user.username} belum memiliki koleksi kartu karakter anime sama sekali.`);
+    }
+
+    // Mengurutkan koleksi kartu berdasarkan Rarity tertinggi (SSR -> SR -> R -> C)
+    const rarityOrder = { 'SSR': 1, 'SR': 2, 'R': 3, 'C': 4 };
+    const sortedCards = [...targetWallet.cards].sort((a, b) => {
+        return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
+    });
+
+    let collectionText = '';
+    sortedCards.forEach((kartu, index) => {
+        collectionText += `**${index + 1}. ${kartu.name}**\n┣ ✨ Rarity: \`${kartu.rarity}\` | 🆔 ID MAL: \`${kartu.id}\`\n┗ 📦 Jumlah: **x${kartu.count || 1}**\n\n`;
+    });
+
+    // Karena batas panjang teks embed Discord maksimal 4096 karakter, kita potong jika terlalu panjang
+    if (collectionText.length > 3900) {
+        collectionText = collectionText.substring(0, 3850) + '\n*...dan beberapa kartu lainnya tidak termuat karena lemari koleksi penuh!*';
+    }
+
+    const collectionEmbed = new EmbedBuilder()
+        .setColor('#00ffbb')
+        .setTitle(`🗂️ Album Koleksi Anime: ${targetMember.user.username}`)
+        .setDescription(collectionText)
+        .setThumbnail(targetMember.user.displayAvatarURL())
+        .setTimestamp()
+        .setFooter({ text: `Mocals Chan Album League • Diminta oleh ${message.author.username}` });
+
+    return message.reply({ embeds: [collectionEmbed] });
+}
+
         // --- MANAJEMEN YOUTUBE NOTIF ---
         if (command === 'setchannelnotif' && message.member.permissions.has('Administrator')) {
             const ch = message.mentions.channels.first();
