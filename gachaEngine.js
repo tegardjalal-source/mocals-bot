@@ -32,9 +32,9 @@ async function rollGachaMALResmi() {
         const url = character.url;
         const rarity = tentukanRarity();
         
-        // Mengambil data peringkat popularitas / total favorit karakter di MAL
-        // Jika datanya tidak ada, kita beri default tulisan Unranked/Biasa aja
-        const malRank = character.favorites ? `#${character.favorites.toLocaleString()}` : 'Unranked';
+        // Perbaikan: Mengambil murni jumlah user yang memfavoritkan karakter (format angka Indonesia, misal: 15.230)
+        // Jika kosong/tidak ada, otomatis diisi string '0'
+        const malRank = character.favorites ? character.favorites.toLocaleString('id-ID') : '0';
 
         const image = character.images?.jpg?.image_url || 'https://i.imgur.com/8N7V0w9.png';
 
@@ -45,7 +45,7 @@ async function rollGachaMALResmi() {
             rarity: rarity,
             image: image,
             url: url,
-            malRank: malRank // <-- Tambahkan parameter rank popularitas baru ini
+            malRank: malRank
         };
 
     } catch (error) {
