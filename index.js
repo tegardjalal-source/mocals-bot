@@ -3,7 +3,8 @@ const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('disco
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
-const { rollGachaMALResmi } = require('./gachaEngine');
+// Mengimpor fungsi gacha biasa dan gacha premium khusus Black Market
+const { rollGachaMALResmi, rollKartuBagus } = require('./gachaEngine');
 
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -116,11 +117,13 @@ client.once('ready', async () => {
     setInterval(updateBotStatus, 60000);
 });
 
+// === LOGIKA AUTOMATION JAM 00:00 (ULANG TAHUN & RESET BLACK MARKET) ===
 cron.schedule('0 0 * * *', async () => {
     const data = await fetchData();
     const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return;
 
+    // 1. Logika Selamat Ulang Tahun
     const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace('/', '-'); 
 
     for (const userId in data.hbd) {
@@ -137,6 +140,67 @@ cron.schedule('0 0 * * *', async () => {
             }
         }
     }
+
+    // 2. Logika Otomatis Pengisian Ulang Bursa Black Market harian
+    console.log("🔄 Jam 00:00: Meriset barang di Black Market...");
+    data.blackMarket = [];
+
+    // Mengisi 5 Kartu Acak Regulasi Pasar Gelap
+    for (let i = 0; i < 5; i++) {
+        const kartu = await rollGachaMALResmi();
+        if (kartu && kartu.sukses) {
+            const hargaBM = Math.floor(Math.random() * 900) + 300; // Rentang harga $300 - $1200
+            data.blackMarket.push({
+                listingId: `BM-${Math.floor(1000 + Math.random() * 9000)}`,
+                id: kartu.id,
+                name: kartu.name,
+                rarity: kartu.rarity,
+                price: hargaBM,
+                isPremium: false
+            });
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Jeda aman pencegah rate limit API
+    }
+
+    // Mengisi 1 Kartu Spesial (Jaminan Rarity Bagus Tinggi SR / SSR)
+    const kartuSpesial = await rollKartuBagus();
+    if (kartuSpesial) {
+        const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500; // Rentang harga $1500 - $3500
+        data.blackMarket.push({
+            listingId: `BM-PREM`,
+            id: kartuSpesial.id,
+            name: kartuSpesial.name,
+            rarity: kartuSpesial.rarity,
+            price: hargaBMSpesial,
+            isPremium: true
+        });
+    }
+
+    await saveData(data);
+
+    // Kirim siaran pengumuman ke channel utama server
+    const mainChannel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0);
+    if (mainChannel && data.blackMarket.length > 0) {
+        let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (BERLAKU 24 JAM)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
+        data.blackMarket.forEach((item) => {
+            if (item.isPremium) {
+                bmText += `🔥 **[PREMIUM ITEM] ${item.name}** [${item.rarity}]\n`;
+            } else {
+                bmText += `📦 **${item.name}** [${item.rarity}]\n`;
+            }
+            bmText += `┣ 💰 Harga Ilegal: **$${item.price}**\n`;
+            bmText += `┗ 🎫 Perintah Beli: \`!buybm ${item.listingId}\`\n\n`;
+        });
+
+        const bmEmbed = new EmbedBuilder()
+            .setColor('#2f3136')
+            .setTitle('🕵️‍♂️ BURSA RAHASIA: BLACK MARKET KARTU')
+            .setDescription(bmText)
+            .setFooter({ text: 'Gunakan "!buybm [Kode_Listing]" sebelum lapak disita polisi jam 00:00 besok! ⏱️' })
+            .setTimestamp();
+
+        mainChannel.send({ content: "@everyone 📑 **Ada selundupan kartu baru di pasar gelap nih!**", embeds: [bmEmbed] });
+    }
 });
 
 client.on('messageCreate', async (message) => {
@@ -148,7 +212,7 @@ client.on('messageCreate', async (message) => {
             .setColor(0x00FF00) 
             .setTitle('📚 Pusat Bantuan Mocals Chan')
             .setDescription(
-                "Haloo ada yang bisa mocals bantu?? kalo ada, kamu bisa melihat list command berikut dan apa yang bisa mocals chan bantu:\n\n" +
+                "Haloo ada yang bisa mocals bantu?? kalo ada, kamu bisa melihat list command berikut and apa yang bisa mocals chan bantu:\n\n" +
                 "`!help` - Menampilkan semua command\n" +
                 "`!status` - Cek status bot\n" +
                 "`!info` - Informasi lebih lanjut"
@@ -157,7 +221,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [helpEmbed] }); 
     }
 
-    // Identifikasi apakah pesan adalah command
     const isCommand = message.content.startsWith('!');
     let command = '';
     let args = [];
@@ -178,10 +241,10 @@ client.on('messageCreate', async (message) => {
                 .setDescription('Halo! Ini adalah daftar perintah yang bisa kamu gunakan:')
                 .addFields(
                     { name: 'ℹ️ Hiburan & Informasi', value: '!ping, !halo, !gabutnih, !rank, !8ball <pertanyaan>, !coinflip, !remind <detik> <pesan>, !userinfo, !serverinfo', inline: false },
-                    { name: '💰 Ekonomi', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>', inline: false },
+                    { name: '💰 Ekonomi & Toko Pasar', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>, !marketlist', inline: false },
                     { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
                     { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false },
-                    { name: '🔮 Gacha & Market Anime', value: '!gacha (Roll $500), !sellcard [ID_MAL] [Harga], !buycard [Kode_Listing], !topcollector', inline: false }
+                    { name: '🔮 Gacha, Collection & Black Market', value: '!gacha (Roll $500), !collection, !sellcard [ID_MAL] [Harga], !buycard [Kode_Listing], !topcollector, !buybm [Kode]', inline: false }
                 )
                 .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
             return message.reply({ embeds: [helpEmbed] });
@@ -215,7 +278,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [infoEmbed] });
         }
 
-        // === FITUR GACHA (SINKRON DENGAN DANA ECONOMY & MENAMPILKAN ID MAL) ===
+        // === FITUR GACHA (SINKRON DENGAN DANA ECONOMY & MENAMPILKAN INDIKATOR ACCURATE FAVORITES) ===
         if (command === 'gacha') {
             const hargaGacha = 500; 
             const userId = message.author.id;
@@ -248,19 +311,19 @@ client.on('messageCreate', async (message) => {
                 await saveData(data);
                 const warnaRarity = { 'SSR': '#ff0055', 'SR': '#ffaa00', 'R': '#00aaff', 'C': '#aaaaaa' };
                 const cardEmbed = new EmbedBuilder()
-    .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
-    .setDescription(`<@${userId}> mendapatkan kartu karakter baru!`)
-    .addFields(
-        { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
-        { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
-        { name: '🆔 ID MAL (Buat Jual)', value: `\`${hasil.id}\``, inline: true },
-        { name: '❤️ MAL Favorites', value: `👤 **${hasil.malRank} User**`, inline: true },
-        { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
-    )
-    .setImage(hasil.image)
-    .setColor(warnaRarity[hasil.rarity] || '#ffffff')
-    .setURL(hasil.url)
-    .setFooter({ text: "Mocals Chan Gacha System • Powered by MyAnimeList" });
+                    .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
+                    .setDescription(`<@${userId}> mendapatkan kartu karakter baru!`)
+                    .addFields(
+                        { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
+                        { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
+                        { name: '🆔 ID MAL (Buat Jual)', value: `\`${hasil.id}\``, inline: true },
+                        { name: '❤️ MAL Favorites', value: `👤 **${hasil.malRank} User**`, inline: true },
+                        { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
+                    )
+                    .setImage(hasil.image)
+                    .setColor(warnaRarity[hasil.rarity] || '#ffffff')
+                    .setURL(hasil.url)
+                    .setFooter({ text: "Mocals Chan Gacha System • Powered by MyAnimeList" });
                 return loadingMsg.edit({ content: "✨ Takdir lu telah tiba! ✨", embeds: [cardEmbed] });
             } catch (error) {
                 console.error("Error Gacha:", error);
@@ -329,41 +392,39 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [sellEmbed] });
         }
 
+        // === COMMAND !MARKETLIST ===
+        if (command === 'marketlist') {
+            if (!data.market || data.market.length === 0) {
+                return message.reply('📭 Bursa pasar kartu saat ini lagi kosong melompong. Belum ada yang jualan nih!');
+            }
+
+            let marketText = '';
+            data.market.forEach((item, index) => {
+                marketText += `**${index + 1}. ${item.name}** [${item.rarity}]\n`;
+                marketText += `┣ 🆔 ID MAL: \`${item.id}\`\n`;
+                marketText += `┣ 👤 Penjual: <@${item.sellerId}>\n`;
+                marketText += `┣ 💰 Harga: **$${item.price.toLocaleString('id-ID')}**\n`;
+                marketText += `┗ 🎫 Kode Beli: \`!buycard ${item.listingId}\`\n\n`;
+            });
+
+            if (marketText.length > 3900) {
+                marketText = marketText.substring(0, 3850) + '\n*...dan beberapa kartu lainnya tidak termuat karena bursa pasar terlalu penuh!*';
+            }
+
+            const marketListEmbed = new EmbedBuilder()
+                .setColor('#ffaa00')
+                .setTitle('🛒 BURSA PASAR KARTU ANIME (FOR SALE)')
+                .setDescription(marketText)
+                .setTimestamp()
+                .setFooter({ text: 'Mocals Chan Marketplace • Segera borong waifu idamanmu! ✨' });
+
+            return message.reply({ embeds: [marketListEmbed] });
+        }
+
         // === COMMAND !BUYCARD ===
         if (command === 'buycard') {
             const listingId = args[0];
             const buyerId = message.author.id;
-            // === COMMAND !MARKETLIST ===
-if (command === 'marketlist') {
-    if (!data.market || data.market.length === 0) {
-        return message.reply('📭 Bursa pasar kartu saat ini lagi kosong melompong. Belum ada yang jualan nih!');
-    }
-
-    let marketText = '';
-    
-    // Looping semua kartu yang sedang dipajang di market
-    data.market.forEach((item, index) => {
-        marketText += `**${index + 1}. ${item.name}** [${item.rarity}]\n`;
-        marketText += `┣ 🆔 ID MAL: \`${item.id}\`\n`;
-        marketText += `┣ 👤 Penjual: <@${item.sellerId}>\n`;
-        marketText += `┣ 💰 Harga: **$${item.price.toLocaleString('id-ID')}**\n`;
-        marketText += `┗ 🎫 Kode Beli: \`!buycard ${item.listingId}\`\n\n`;
-    });
-
-    // Batasi panjang teks embed agar tidak melebihi limit Discord (maksimal 4096 karakter)
-    if (marketText.length > 3900) {
-        marketText = marketText.substring(0, 3850) + '\n*...dan beberapa kartu lainnya tidak termuat karena bursa pasar terlalu penuh!*';
-    }
-
-    const marketListEmbed = new EmbedBuilder()
-        .setColor('#ffaa00')
-        .setTitle('🛒 BURSA PASAR KARTU ANIME (FOR SALE)')
-        .setDescription(marketText)
-        .setTimestamp()
-        .setFooter({ text: 'Mocals Chan Marketplace • Segera borong waifu idamanmu! ✨' });
-
-    return message.reply({ embeds: [marketListEmbed] });
-}
 
             if (!listingId) {
                 return message.reply('✖️ Masukkan kode listing toko! Format: `!buycard [Kode_Listing]`');
@@ -421,6 +482,117 @@ if (command === 'marketlist') {
             return message.reply({ embeds: [buyEmbed] });
         }
 
+        // === COMMAND !BUYBM (BELI DARI BLACK MARKET) ===
+        if (command === 'buybm') {
+            const listingId = args[0];
+            const buyerId = message.author.id;
+
+            if (!listingId) {
+                return message.reply('✖️ Masukkan kode listing pasar gelap! Format: `!buybm [Kode_Listing]`');
+            }
+
+            if (!data.blackMarket || data.blackMarket.length === 0) {
+                return message.reply('✖️ Penyelundup sedang bersembunyi. Black Market kosong saat ini.');
+            }
+
+            const bmIndex = data.blackMarket.findIndex(item => item.listingId === listingId);
+            if (bmIndex === -1) {
+                return message.reply('✖️ Kode listing pasar gelap salah atau kartu tersebut sudah diborong orang lain!');
+            }
+
+            const itemBM = data.blackMarket[bmIndex];
+
+            if (!data.economy) data.economy = {};
+            if (!data.economy[buyerId]) data.economy[buyerId] = { money: 0, cards: [] };
+            const buyerWallet = data.economy[buyerId];
+
+            if (buyerWallet.money < itemBM.price) {
+                return message.reply(`✖️ Duit haram lu kurang! Harganya **$${itemBM.price}**, dompet lu cuma ada **$${buyerWallet.money}**.`);
+            }
+
+            buyerWallet.money -= itemBM.price;
+
+            if (!buyerWallet.cards) buyerWallet.cards = [];
+            const sudahPunya = buyerWallet.cards.find(c => c.id === itemBM.id);
+            if (sudahPunya) {
+                sudahPunya.count += 1;
+            } else {
+                buyerWallet.cards.push({ id: itemBM.id, name: itemBM.name, rarity: itemBM.rarity, count: 1 });
+            }
+
+            data.blackMarket.splice(bmIndex, 1);
+            await saveData(data);
+
+            const bmBuyEmbed = new EmbedBuilder()
+                .setColor('#1a1a1a')
+                .setTitle('🕵️‍♂️ TRANSAKSI GELAP SELESAI!')
+                .setDescription(`<@${buyerId}> berhasil menyelundupkan kartu dari Black Market secara ilegal!`)
+                .addFields(
+                    { name: '📦 Kartu Selundupan', value: `**${itemBM.name}** [${itemBM.rarity}]`, inline: true },
+                    { name: '💸 Dana Terpotong', value: `**$${itemBM.price}**`, inline: true },
+                    { name: '💰 Sisa Uangmu', value: `**$${buyerWallet.money}**`, inline: false }
+                );
+
+            return message.reply({ embeds: [bmBuyEmbed] });
+        }
+
+        // === COMMAND KHUSUS ADMIN: !TESTBM (SIMULASI SECARA PAKSA REFRESH PASAR GELAP) ===
+        if (command === 'testbm' && message.member.permissions.has('Administrator')) {
+            const loadingBM = await message.reply("⏳ Menghubungi pasar gelap... Sedang menyelundupkan 6 barang baru dari MyAnimeList...");
+            
+            data.blackMarket = [];
+            for (let i = 0; i < 5; i++) {
+                const kartu = await rollGachaMALResmi();
+                if (kartu && kartu.sukses) {
+                    const hargaBM = Math.floor(Math.random() * 900) + 300;
+                    data.blackMarket.push({
+                        listingId: `BM-${Math.floor(1000 + Math.random() * 9000)}`,
+                        id: kartu.id,
+                        name: kartu.name,
+                        rarity: kartu.rarity,
+                        price: hargaBM,
+                        isPremium: false
+                    });
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            const kartuSpesial = await rollKartuBagus();
+            if (kartuSpesial) {
+                const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500;
+                data.blackMarket.push({
+                    listingId: `BM-PREM`,
+                    id: kartuSpesial.id,
+                    name: kartuSpesial.name,
+                    rarity: kartuSpesial.rarity,
+                    price: hargaBMSpesial,
+                    isPremium: true
+                });
+            }
+
+            await saveData(data);
+
+            let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (TEST MODE)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
+            data.blackMarket.forEach((item) => {
+                if (item.isPremium) {
+                    bmText += `🔥 **[PREMIUM ITEM] ${item.name}** [${item.rarity}]\n`;
+                } else {
+                    bmText += `📦 **${item.name}** [${item.rarity}]\n`;
+                }
+                bmText += `┣ 💰 Harga Ilegal: **$${item.price}**\n`;
+                bmText += `┗ 🎫 Perintah Beli: \`!buybm ${item.listingId}\`\n\n`;
+            });
+
+            const bmEmbed = new EmbedBuilder()
+                .setColor('#2f3136')
+                .setTitle('🕵️‍♂️ BURSA RAHASIA: BLACK MARKET KARTU')
+                .setDescription(bmText)
+                .setTimestamp();
+
+            await loadingBM.delete();
+            return message.channel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
+        }
+
         // === COMMAND !TOPCOLLECTOR ===
         if (command === 'topcollector') {
             if (!data.economy) data.economy = {};
@@ -458,46 +630,42 @@ if (command === 'marketlist') {
             return message.reply({ embeds: [collectorEmbed] });
         }
 
-        // === !COLLECTION / !COLLECTION @USER ===
-           if (command === 'collection') {
-    // Jika user melakukan tag orang lain (!collection @User), bot akan melihat koleksi orang tersebut. 
-    // Jika tidak mengetik siapa-siapa (!collection), bot melihat koleksi miliknya sendiri.
-    const targetMember = message.mentions.members.first() || message.member;
-    const targetId = targetMember.id;
+        // === COMMAND !COLLECTION / !COLLECTION @USER ===
+        if (command === 'collection') {
+            const targetMember = message.mentions.members.first() || message.member;
+            const targetId = targetMember.id;
 
-    if (!data.economy) data.economy = {};
-    const targetWallet = data.economy[targetId];
+            if (!data.economy) data.economy = {};
+            const targetWallet = data.economy[targetId];
 
-    if (!targetWallet || !targetWallet.cards || targetWallet.cards.length === 0) {
-        return message.reply(`📭 ${targetMember.user.username} belum memiliki koleksi kartu karakter anime sama sekali.`);
-    }
+            if (!targetWallet || !targetWallet.cards || targetWallet.cards.length === 0) {
+                return message.reply(`📭 ${targetMember.user.username} belum memiliki koleksi kartu karakter anime sama sekali.`);
+            }
 
-    // Mengurutkan koleksi kartu berdasarkan Rarity tertinggi (SSR -> SR -> R -> C)
-    const rarityOrder = { 'SSR': 1, 'SR': 2, 'R': 3, 'C': 4 };
-    const sortedCards = [...targetWallet.cards].sort((a, b) => {
-        return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
-    });
+            const rarityOrder = { 'SSR': 1, 'SR': 2, 'R': 3, 'C': 4 };
+            const sortedCards = [...targetWallet.cards].sort((a, b) => {
+                return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
+            });
 
-    let collectionText = '';
-    sortedCards.forEach((kartu, index) => {
-        collectionText += `**${index + 1}. ${kartu.name}**\n┣ ✨ Rarity: \`${kartu.rarity}\` | 🆔 ID MAL: \`${kartu.id}\`\n┗ 📦 Jumlah: **x${kartu.count || 1}**\n\n`;
-    });
+            let collectionText = '';
+            sortedCards.forEach((kartu, index) => {
+                collectionText += `**${index + 1}. ${kartu.name}**\n┣ ✨ Rarity: \`${kartu.rarity}\` | 🆔 ID MAL: \`${kartu.id}\`\n┗ 📦 Jumlah: **x${kartu.count || 1}**\n\n`;
+            });
 
-    // Karena batas panjang teks embed Discord maksimal 4096 karakter, kita potong jika terlalu panjang
-    if (collectionText.length > 3900) {
-        collectionText = collectionText.substring(0, 3850) + '\n*...dan beberapa kartu lainnya tidak termuat karena lemari koleksi penuh!*';
-    }
+            if (collectionText.length > 3900) {
+                collectionText = collectionText.substring(0, 3850) + '\n*...dan beberapa kartu lainnya tidak termuat karena lemari koleksi penuh!*';
+            }
 
-    const collectionEmbed = new EmbedBuilder()
-        .setColor('#00ffbb')
-        .setTitle(`🗂️ Album Koleksi Anime: ${targetMember.user.username}`)
-        .setDescription(collectionText)
-        .setThumbnail(targetMember.user.displayAvatarURL())
-        .setTimestamp()
-        .setFooter({ text: `Mocals Chan Album League • Diminta oleh ${message.author.username}` });
+            const collectionEmbed = new EmbedBuilder()
+                .setColor('#00ffbb')
+                .setTitle(`🗂️ Album Koleksi Anime: ${targetMember.user.username}`)
+                .setDescription(collectionText)
+                .setThumbnail(targetMember.user.displayAvatarURL())
+                .setTimestamp()
+                .setFooter({ text: `Mocals Chan Album League • Diminta oleh ${message.author.username}` });
 
-    return message.reply({ embeds: [collectionEmbed] });
-}
+            return message.reply({ embeds: [collectionEmbed] });
+        }
 
         // --- MANAJEMEN YOUTUBE NOTIF ---
         if (command === 'setchannelnotif' && message.member.permissions.has('Administrator')) {
