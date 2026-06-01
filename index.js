@@ -3,7 +3,7 @@ const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('disco
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
-// Mengimpor fungsi gacha biasa dan gacha premium khusus Black Market
+// Mengimpor fungsi gacha reguler dan gacha premium khusus bursa gelap
 const { rollGachaMALResmi, rollKartuBagus } = require('./gachaEngine');
 
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
@@ -117,7 +117,7 @@ client.once('ready', async () => {
     setInterval(updateBotStatus, 60000);
 });
 
-// === LOGIKA AUTOMATION JAM 00:00 (ULANG TAHUN & RESET BLACK MARKET) ===
+// === LOGIKA AUTOMATION JAM 00:00 (ULANG TAHUN & REFRESH BLACK MARKET KE CHANNEL PILIHAN) ===
 cron.schedule('0 0 * * *', async () => {
     const data = await fetchData();
     const guild = client.guilds.cache.get(GUILD_ID);
@@ -141,15 +141,14 @@ cron.schedule('0 0 * * *', async () => {
         }
     }
 
-    // 2. Logika Otomatis Pengisian Ulang Bursa Black Market harian
+    // 2. Logika Bursa Gelap (Black Market) Otomatis
     console.log("🔄 Jam 00:00: Meriset barang di Black Market...");
     data.blackMarket = [];
 
-    // Mengisi 5 Kartu Acak Regulasi Pasar Gelap
     for (let i = 0; i < 5; i++) {
         const kartu = await rollGachaMALResmi();
         if (kartu && kartu.sukses) {
-            const hargaBM = Math.floor(Math.random() * 900) + 300; // Rentang harga $300 - $1200
+            const hargaBM = Math.floor(Math.random() * 900) + 300; 
             data.blackMarket.push({
                 listingId: `BM-${Math.floor(1000 + Math.random() * 9000)}`,
                 id: kartu.id,
@@ -159,13 +158,12 @@ cron.schedule('0 0 * * *', async () => {
                 isPremium: false
             });
         }
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Jeda aman pencegah rate limit API
+        await new Promise(resolve => setTimeout(resolve, 2000)); 
     }
 
-    // Mengisi 1 Kartu Spesial (Jaminan Rarity Bagus Tinggi SR / SSR)
     const kartuSpesial = await rollKartuBagus();
     if (kartuSpesial) {
-        const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500; // Rentang harga $1500 - $3500
+        const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500; 
         data.blackMarket.push({
             listingId: `BM-PREM`,
             id: kartuSpesial.id,
@@ -178,9 +176,11 @@ cron.schedule('0 0 * * *', async () => {
 
     await saveData(data);
 
-    // Kirim siaran pengumuman ke channel utama server
-    const mainChannel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0);
-    if (mainChannel && data.blackMarket.length > 0) {
+    // Kunci sasaran target bursa gelap pilihan admin
+    const targetChannelId = data.serverSettings?.[guild.id]?.bmChannelId;
+    const bmChannel = targetChannelId ? guild.channels.cache.get(targetChannelId) : (guild.systemChannel || guild.channels.cache.find(c => c.type === 0));
+
+    if (bmChannel && data.blackMarket.length > 0) {
         let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (BERLAKU 24 JAM)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
         data.blackMarket.forEach((item) => {
             if (item.isPremium) {
@@ -199,7 +199,7 @@ cron.schedule('0 0 * * *', async () => {
             .setFooter({ text: 'Gunakan "!buybm [Kode_Listing]" sebelum lapak disita polisi jam 00:00 besok! ⏱️' })
             .setTimestamp();
 
-        mainChannel.send({ content: "@everyone 📑 **Ada selundupan kartu baru di pasar gelap nih!**", embeds: [bmEmbed] });
+        bmChannel.send({ content: "@everyone 📑 **Ada selundupan kartu baru di pasar gelap nih!**", embeds: [bmEmbed] });
     }
 });
 
@@ -244,7 +244,7 @@ client.on('messageCreate', async (message) => {
                     { name: '💰 Ekonomi & Toko Pasar', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>, !marketlist', inline: false },
                     { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
                     { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false },
-                    { name: '🔮 Gacha, Collection & Black Market', value: '!gacha (Roll $500), !collection, !sellcard [ID_MAL] [Harga], !buycard [Kode_Listing], !topcollector, !buybm [Kode]', inline: false }
+                    { name: '🔮 Gacha, Collection & Black Market', value: '!gacha (Roll $500), !collection, !sellcard [ID_MAL] [Harga], !buycard [Kode_Listing], !topcollector, !buybm [Kode], !bmchannelset #channel', inline: false }
                 )
                 .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
             return message.reply({ embeds: [helpEmbed] });
@@ -278,7 +278,20 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [infoEmbed] });
         }
 
-        // === FITUR GACHA (SINKRON DENGAN DANA ECONOMY & MENAMPILKAN INDIKATOR ACCURATE FAVORITES) ===
+        // === COMMAND KUNCI HUB CHANNEL BLACK MARKET ===
+        if (command === 'bmchannelset' && message.member.permissions.has('Administrator')) {
+            const ch = message.mentions.channels.first();
+            if (!ch) return message.reply('✖️ Format salah! Tag channel tujuannya. Contoh: `!bmchannelset #black-market`');
+
+            if (!data.serverSettings) data.serverSettings = {};
+            if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+            
+            data.serverSettings[message.guild.id].bmChannelId = ch.id;
+            await saveData(data);
+            return message.reply(`✅ Lapak rahasia dikunci! Info selundupan Black Market harian akan dikirim otomatis ke channel ${ch}.`);
+        }
+
+        // === FITUR GACHA ANIME ===
         if (command === 'gacha') {
             const hargaGacha = 500; 
             const userId = message.author.id;
@@ -482,7 +495,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [buyEmbed] });
         }
 
-        // === COMMAND !BUYBM (BELI DARI BLACK MARKET) ===
+        // === COMMAND !BUYBM ===
         if (command === 'buybm') {
             const listingId = args[0];
             const buyerId = message.author.id;
@@ -536,7 +549,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [bmBuyEmbed] });
         }
 
-        // === COMMAND KHUSUS ADMIN: !TESTBM (SIMULASI SECARA PAKSA REFRESH PASAR GELAP) ===
+        // === COMMAND KHUSUS ADMIN: !TESTBM (SIMULASI DAN KUNCI ASAL JALUR CHANNEL) ===
         if (command === 'testbm' && message.member.permissions.has('Administrator')) {
             const loadingBM = await message.reply("⏳ Menghubungi pasar gelap... Sedang menyelundupkan 6 barang baru dari MyAnimeList...");
             
@@ -572,6 +585,10 @@ client.on('messageCreate', async (message) => {
 
             await saveData(data);
 
+            // Alihkan tujuan bursa ke channel setelan admin
+            const targetChannelId = data.serverSettings?.[message.guild.id]?.bmChannelId;
+            const destChannel = targetChannelId ? message.guild.channels.cache.get(targetChannelId) : message.channel;
+
             let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (TEST MODE)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
             data.blackMarket.forEach((item) => {
                 if (item.isPremium) {
@@ -590,7 +607,7 @@ client.on('messageCreate', async (message) => {
                 .setTimestamp();
 
             await loadingBM.delete();
-            return message.channel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
+            return destChannel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
         }
 
         // === COMMAND !TOPCOLLECTOR ===
@@ -630,7 +647,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [collectorEmbed] });
         }
 
-        // === COMMAND !COLLECTION / !COLLECTION @USER ===
+        // === COMMAND !COLLECTION ===
         if (command === 'collection') {
             const targetMember = message.mentions.members.first() || message.member;
             const targetId = targetMember.id;
