@@ -216,6 +216,7 @@ client.on('messageCreate', async (message) => {
                 "`!help` - Menampilkan semua command\n" +
                 "`!status` - Cek status bot\n" +
                 "`!info` - Informasi lebih lanjut"
+                "`!gachainfo` - guide untuk market dan gacha waifu/husbando kalian! ✨"
             )
             .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
         return message.reply({ embeds: [helpEmbed] }); 
@@ -271,6 +272,25 @@ client.on('messageCreate', async (message) => {
                 .setDescription('Hai! Aku Mocals Chan, asisten ceria yang siap menemanimu di server ini.')
                 .addFields(
                     { name: '🛠️ Apa yang bisa aku lakukan?', value: 'Membantu urusan ekonomi, hiburan, hingga pengingat waktu.', inline: false },
+                    { name: '✨ Dibuat dengan', value: 'Node.js & Discord.js', inline: true },
+                    { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
+                )
+                .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
+            return message.reply({ embeds: [infoEmbed] });
+        }
+
+        if (command === '!gachainfo') {
+            const infoEmbed = new EmbedBuilder()
+                .setColor(0xFF69B4)
+                .setTitle('🌸 Tentang Mocals Chan')
+                .setDescription('Hai! Aku Mocals Chan, asisten ceria yang siap menemanimu di server ini.')
+                // === PENGGUNAAN DI DALAM !GACHAINFO (atau !info) ===
+                .addFields(
+                    { name: '🛠️ Apa yang bisa aku lakukan?', value: 'Membantu urusan ekonomi, hiburan, hingga pengingat waktu.', inline: false },
+                    { name: '🔮 Gacha Anime', value: '`!gacha` - Roll karakter anime (ID MAL) dengan jaminan sistem popularitas MAL.', inline: false },
+                    { name: '🗂️ Koleksi & Rank', value: '`!collection` - Lihat albummu.\n`!collection <@user>` - Intip album orang.\n`!topcollector` - Lihat peringkat kolektor.', inline: false },
+                    { name: '🛒 Pasar Umum', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Lihat pasar.\n`!buycard [Kode]` - Beli kartu.', inline: false },
+                    { name: '🕵️‍♂️ Black Market', value: '`!buybm [Kode]` - Beli barang selundupan (Reset tiap jam 00:00).', inline: false },
                     { name: '✨ Dibuat dengan', value: 'Node.js & Discord.js', inline: true },
                     { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
                 )
