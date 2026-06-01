@@ -360,7 +360,7 @@ client.on('messageCreate', async (message) => {
     
     if (message.content === '!ping') return message.reply('Pong! 🏓');
     if (message.content === '!halo') return message.reply(`Halo ${message.author}! Mocals Bot siap membantu. ✨`);
-    if (message.content === '!getabuthbd') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
+    if (message.content === '!gabutnih') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
     
     if (message.content === '!rank') {
         const userXP = data.xp[message.author.id] || { xp: 0, level: 1 };
