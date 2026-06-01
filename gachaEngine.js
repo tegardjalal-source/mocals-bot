@@ -65,13 +65,3 @@ async function rollKartuBagus() {
 }
 
 module.exports = { rollGachaMALResmi, rollKartuBagus };
-```[cite: 1]
-
----
-
-### 🚀 Langkah Selanjutnya:
-1. Pastikan isi `gachaEngine.js` **hanya** kode di atas[cite: 1].
-2. Simpan (`Ctrl + S`)[cite: 1].
-3. Restart bot kamu[cite: 1]. 
-
-Bot Mocals Chan dijamin langsung terbang bugar tanpa error! Coba tes ketik `!gacha` lagi nanti[cite: 1].
