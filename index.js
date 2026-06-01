@@ -245,7 +245,7 @@ client.on('messageCreate', async (message) => {
                     { name: '💰 Ekonomi & Toko Pasar', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>, !marketlist', inline: false },
                     { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
                     { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false },
-                    { name: '🔮 Gacha, Collection & Black Market', value: '!gacha (Roll $500), !collection, !sellcard [ID_MAL] [Harga], !buycard [Kode_Listing], !topcollector, !buybm [Kode], !bmchannelset #channel', inline: false }
+                    { name: '🔮 Gacha, Collection & Black Market', value: '!gacha (Roll $500), !collection, !sellcard [ID_MAL] [Harga], !buycard [Kode_Listing], !topcollector, !buybm [Kode], !bmchannelset #channel, !charinfo [Nama]', inline: false }
                 )
                 .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
             return message.reply({ embeds: [helpEmbed] });
@@ -279,23 +279,76 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [infoEmbed] });
         }
 
-        if (command === '!gachainfo') {
+        if (command === 'gachainfo') {
             const infoEmbed = new EmbedBuilder()
                 .setColor(0xFF69B4)
-                .setTitle('🌸 Tentang Mocals Chan')
-                .setDescription('Hai! Aku Mocals Chan, asisten ceria yang siap menemanimu di server ini.')
-                // === PENGGUNAAN DI DALAM !GACHAINFO (atau !info) ===
+                .setTitle('🔮 Panduan Gacha & Toko Bursa')
+                .setDescription('Hai! Ini adalah panduan lengkap cara mengoperasikan sistem kartu anime Mocals Chan:')
                 .addFields(
                     { name: '🛠️ Apa yang bisa aku lakukan?', value: 'Membantu urusan ekonomi, hiburan, hingga pengingat waktu.', inline: false },
-                    { name: '🔮 Gacha Anime', value: '`!gacha` - Roll karakter anime (ID MAL) dengan jaminan sistem popularitas MAL.', inline: false },
+                    { name: '🔮 Gacha Anime & Wiki', value: '`!gacha` - Roll waifu/husbando ($500).\n`!charinfo [Nama]` - Cari info detail & bio karakter anime.', inline: false },
                     { name: '🗂️ Koleksi & Rank', value: '`!collection` - Lihat albummu.\n`!collection <@user>` - Intip album orang.\n`!topcollector` - Lihat peringkat kolektor.', inline: false },
                     { name: '🛒 Pasar Umum', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Lihat pasar.\n`!buycard [Kode]` - Beli kartu.', inline: false },
                     { name: '🕵️‍♂️ Black Market', value: '`!buybm [Kode]` - Beli barang selundupan (Reset tiap jam 00:00).', inline: false },
                     { name: '✨ Dibuat dengan', value: 'Node.js & Discord.js', inline: true },
                     { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
                 )
-                .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
+                .setFooter({ text: 'Gunakan perintah bursa pasar ini secara bijak ya! ✨' });
             return message.reply({ embeds: [infoEmbed] });
+        }
+
+        // === FITUR BARU: !CHARINFO [NAMA KARAKTER] ===
+        if (command === 'charinfo') {
+            const charName = args.join(' ');
+            if (!charName) {
+                return message.reply('✖️ Format salah! Gunakan: `!charinfo [Nama Karakter]`\nContoh: `!charinfo Lelouch Lamperouge`');
+            }
+
+            const loadingMsg = await message.reply('🔍 Sedang mengontak database MyAnimeList... Mohon tunggu...');
+
+            try {
+                // Mencari database karakter berdasarkan string pencarian nama (limit 1 hasil teratas)
+                const response = await axios.get(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(charName)}&limit=1`);
+                const charData = response.data?.data?.[0];
+
+                if (!charData) {
+                    return loadingMsg.edit(`✖️ Karakter dengan nama **${charName}** gagal ditemukan di MyAnimeList.`);
+                }
+
+                const name = charData.name;
+                const kanjiName = charData.name_kanji ? ` (${charData.name_kanji})` : '';
+                const url = charData.url;
+                const imageUrl = charData.images?.jpg?.image_url || 'https://i.imgur.com/8N7V0w9.png';
+                const favorites = charData.favorites ? charData.favorites.toLocaleString('id-ID') : '0';
+                
+                // Memotong deskripsi biografi karakter jika kepanjangan agar tidak merusak limit Embed Discord
+                let about = charData.about || 'Tidak ada info biografi tertulis tentang karakter ini.';
+                if (about.length > 1800) {
+                    about = about.substring(0, 1795) + '... *(baca selengkapnya di situs MAL)*';
+                }
+
+                const charEmbed = new EmbedBuilder()
+                    .setColor('#ff69b4')
+                    .setTitle(`👤 Profil Karakter: ${name}${kanjiName}`)
+                    .setURL(url)
+                    .setDescription(about)
+                    .setThumbnail(imageUrl)
+                    .addFields(
+                        { name: '🆔 ID MAL Karakter', value: `\`${charData.mal_id}\``, inline: true },
+                        { name: '❤️ Total Penggemar', value: `👤 **${favorites} User**`, inline: true }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'Mocals Chan Database Wiki • Powered by MyAnimeList' });
+
+                return loadingMsg.edit({ content: '✨ Data karakter berhasil ditemukan! ✨', embeds: [charEmbed] });
+
+            } catch (error) {
+                console.error('Error saat nyari charinfo MAL:', error.message);
+                if (error.response && error.response.status === 429) {
+                    return loadingMsg.edit('✖️ Server MyAnimeList sedang membatasi permintaan (Rate Limit). Sembari menunggu cooldown, silakan coba lagi beberapa saat lagi!');
+                }
+                return loadingMsg.edit('✖️ Terjadi gangguan koneksi internet saat menghubungi server MyAnimeList.');
+            }
         }
 
         // === COMMAND KUNCI HUB CHANNEL BLACK MARKET ===
@@ -569,7 +622,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [bmBuyEmbed] });
         }
 
-        // === COMMAND KHUSUS ADMIN: !TESTBM (SIMULASI DAN KUNCI ASAL JALUR CHANNEL) ===
+        // === COMMAND KHUSUS ADMIN: !TESTBM ===
         if (command === 'testbm' && message.member.permissions.has('Administrator')) {
             const loadingBM = await message.reply("⏳ Menghubungi pasar gelap... Sedang menyelundupkan 6 barang baru dari MyAnimeList...");
             
@@ -605,7 +658,6 @@ client.on('messageCreate', async (message) => {
 
             await saveData(data);
 
-            // Alihkan tujuan bursa ke channel setelan admin
             const targetChannelId = data.serverSettings?.[message.guild.id]?.bmChannelId;
             const destChannel = targetChannelId ? message.guild.channels.cache.get(targetChannelId) : message.channel;
 
@@ -886,7 +938,7 @@ client.on('messageCreate', async (message) => {
 
         if (command === '8ball') {
             const q = args.join(' ');
-            const ans = ['Ya, tentu saja! ✨', 'Sepertinya tidak...', 'Mungkin nanti.', 'Jangan harap.', 'Tentu saja! 🍀', 'Tidak mungkin.'];
+            const ans = ['Ya, tentu saja! ✨', 'Sepertinya tidak...', 'Moking nanti.', 'Jangan harap.', 'Tentu saja! 🍀', 'Tidak mungkin.'];
             return message.reply(`🎱 **Pertanyaan**: ${q || 'kosong'}\n**Jawaban**: ${ans[Math.floor(Math.random() * ans.length)]}`);
         }
 
