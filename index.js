@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('disco
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
+const { rollGachaMALResmi } = require('./gachaEngine');
 
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
 const MASTER_KEY = process.env.JSONBIN_KEY; 
@@ -151,6 +152,86 @@ client.on('messageCreate', async (message) => {
 
     // === UTAMAKAN PENGECEKAN PERINTAH (COMMAND) TERLEBIH DAHULU ===
 
+    // === Di bawah baris 150 (if (message.author.bot) return;) ===
+// Pemecah argumen biar bot tau mana perintah utama, mana teks tambahannya
+if (!message.content.startsWith('!')) return;
+const args = message.content.slice(1).trim().split(/ +/);
+const command = args.shift().toLowerCase();
+
+// === Kode !help lu yang lama ===
+if (command === 'help') { // <--- ini diganti dari (message.content === '!help')
+    const helpEmbed = new EmbedBuilder()
+    // ... isi helpEmbed lu ...
+    return message.reply({ embeds: [helpEmbed] });
+}
+
+// === !GACHA NYA ===
+if (command === 'gacha') {
+    const hargaGacha = 500; 
+    const userId = message.author.id;
+
+    try {
+        // Ambil data ekonomi dari DB JSONbin lu
+        let data = await fetchData(); 
+        if (!data.users) data.users = {};
+        if (!data.users[userId]) data.users[userId] = { money: 0, cards: [] };
+
+        const userWallet = data.users[userId];
+
+        if (userWallet.money < hargaGacha) {
+            return message.reply(`✖️ Dompet lu kering! Sekali gacha butuh **$${hargaGacha}**, duit lu cuma **$${userWallet.money}**.`);
+        }
+
+        const loadingMsg = await message.reply("🔮 Menghubungi server MyAnimeList... Mencari takdir waifu/husbando lu...");
+
+        // Panggil fungsi engine gacha MAL resmi yang ditaruh di gachaEngine.js
+        const hasil = await rollGachaMALResmi();
+
+        if (!hasil.sukses) {
+            return loadingMsg.edit(hasil.pesan);
+        }
+
+        // Potong duit & simpan kartu
+        userWallet.money -= hargaGacha;
+        if (!userWallet.cards) userWallet.cards = [];
+        
+        const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
+        if (sudahPunya) {
+            sudahPunya.count += 1;
+        } else {
+            userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
+        }
+
+        await saveData(data);
+
+        const warnaRarity = { 'SSR': '#ff0055', 'SR': '#ffaa00', 'R': '#00aaff', 'C': '#aaaaaa' };
+
+        const cardEmbed = new EmbedBuilder()
+            .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
+            .setDescription(`<@${userId}> mendapatkan kartu karakter baru!`)
+            .addFields(
+                { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
+                { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
+                { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money}**`, inline: false }
+            )
+            .setImage(hasil.image)
+            .setColor(warnaRarity[hasil.rarity] || '#ffffff')
+            .setURL(hasil.url)
+            .setFooter({ text: "Mocals Chan Gacha System • Powered by MyAnimeList" });
+
+        return loadingMsg.edit({ content: "✨ Takdir lu telah tiba! ✨", embeds: [cardEmbed] });
+
+    } catch (error) {
+        console.error("Error Gacha:", error);
+        return message.reply("✖️ Terjadi kesalahan internal saat memproses gacha.");
+    }
+}
+
+// === Setelah block gacha ini, baru lanjut ke command status lu yang lama ===
+if (command === 'status') { // <--- ini diganti dari (message.content === '!status')
+    // ... isi status lu ...
+}
+    
     if (message.content === '!help') {
         const helpEmbed = new EmbedBuilder()
             .setColor(0x00FF00)
