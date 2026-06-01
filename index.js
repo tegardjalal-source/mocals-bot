@@ -22,6 +22,13 @@ async function saveData(data) {
     } catch (e) { console.error("Gagal simpan:", e); }
 }
 
+// === DECK SYSTEM HELPER: Menghitung Power Kartu Secara Dinamis + Bonus Dadu Hoki ===
+function hitungPowerKartu(rarity) {
+    const basePower = { 'SSR': 100, 'SR': 70, 'R': 40, 'C': 20 };
+    const bonusHoki = Math.floor(Math.random() * 16); // Bonus acak 0-15 poin agar adu deck tidak monoton
+    return (basePower[rarity] || 20) + bonusHoki;
+}
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -117,7 +124,7 @@ client.once('ready', async () => {
     setInterval(updateBotStatus, 60000);
 });
 
-// === LOGIKA AUTOMATION JAM 00:00 (ULANG TAHUN & REFRESH BLACK MARKET KE CHANNEL PILIHAN) ===
+// === LOGIKA AUTOMATION JAM 00:00 (ULANG TAHUN & REFRESH BLACK MARKET) ===
 cron.schedule('0 0 * * *', async () => {
     const data = await fetchData();
     const guild = client.guilds.cache.get(GUILD_ID);
@@ -145,7 +152,6 @@ cron.schedule('0 0 * * *', async () => {
     console.log("🔄 Jam 00:00: Meriset barang di Black Market...");
     data.blackMarket = [];
 
-    // Mengambil 5 kartu random biasa untuk Black Market menggunakan engine baru
     for (let i = 0; i < 5; i++) {
         const kartu = await jalankanGacha('biasa');
         if (kartu && kartu.sukses) {
@@ -159,10 +165,9 @@ cron.schedule('0 0 * * *', async () => {
                 isPremium: false
             });
         }
-        await new Promise(resolve => setTimeout(resolve, 1300)); // Jeda aman ringankan beban server
+        await new Promise(resolve => setTimeout(resolve, 1300)); 
     }
 
-    // Mengambil 1 kartu Premium (Dijamin kasta tinggi SSR via Mega Luck)
     const kartuSpesial = await jalankanGacha('megaluck');
     if (kartuSpesial && kartuSpesial.sukses) {
         const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500; 
@@ -178,7 +183,6 @@ cron.schedule('0 0 * * *', async () => {
 
     await saveData(data);
 
-    // Kunci sasaran target bursa gelap pilihan admin
     const targetChannelId = data.serverSettings?.[guild.id]?.bmChannelId;
     const bmChannel = targetChannelId ? guild.channels.cache.get(targetChannelId) : (guild.systemChannel || guild.channels.cache.find(c => c.type === 0));
 
@@ -241,15 +245,27 @@ client.on('messageCreate', async (message) => {
             const helpEmbed = new EmbedBuilder()
                 .setColor(0x00FF00)
                 .setTitle('📚 Pusat Bantuan Mocals Chan')
-                .setDescription('Halo! Ini adalah daftar perintah yang bisa kamu gunakan:')
+                .setDescription('Halo! Ini adalah daftar perintah lengkap yang bisa kamu gunakan di server:')
                 .addFields(
-                    { name: 'ℹ️ Hiburan & Informasi', value: '!ping, !halo, !gabutnih, !rank, !8ball <pertanyaan>, !coinflip, !remind <detik> <pesan>, !userinfo, !serverinfo', inline: false },
-                    { name: '💰 Ekonomi & Toko Pasar', value: '!money, !work, !gamble <jumlah>, !leaderboard, !givecash @user <jumlah>, !marketlist', inline: false },
-                    { name: '⚔️ Duel & Taruhan', value: '!duel @user, !bit @user <jumlah>, !confirm, !reject', inline: false },
-                    { name: '🎂 Ulang Tahun', value: '!sethbd DD-MM', inline: false },
-                    { name: '🔮 Gacha Multi-Luck & Black Market', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!collection`, `!sellcard`, `!buycard`, `!topcollector`, `!charinfo [Nama]`', inline: false }
-                )
-                .setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
+                    { name: 'ℹ️ Hiburan & Informasi', value: '`!ping`, `!halo`, `!gabutnih`, `!rank`, `!8ball`, `!coinflip`, `!remind`, `!userinfo`, `!serverinfo`, `!status`, `!info`', inline: false },
+                    { name: '💰 Ekonomi & Toko Pasar', value: '`!money`, `!work`, `!gamble`, `!leaderboard`, `!givecash`', inline: false },
+                    { name: '⚔️ Duel Formasi Deck & Taruhan', value: '`!setdeck [ID_MAL]` (Pasang/copot kartu), `!deck` (Cek deck), `!duel @user` (Latihan), `!bit @user [jumlah]` (Taruhan koin), `!confirm`, `!reject`', inline: false },
+                    { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`', inline: false },
+                    { name: '🔮 Gacha Multi-Luck & Album Kartu', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!gachainfo`, `!collection`, `!charinfo`, `!topcollector`', inline: false },
+                    { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard`, `!marketlist`, `!buycard`, `!buybm`', inline: false },
+                    { name: '📺 Pemantau YouTube Live', value: '`!addchannel`, `!removechannel`, `!listchannels`', inline: false }
+                );
+
+            if (message.member.permissions.has('Administrator')) {
+                helpEmbed.addFields({
+                    name: '🛠️ Perintah Khusus Administrator (Rahasia)',
+                    value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!teshbd`',
+                    inline: false
+                });
+                helpEmbed.setColor('#ff0000'); 
+            }
+
+            helpEmbed.setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
             return message.reply({ embeds: [helpEmbed] });
         }
 
@@ -292,14 +308,13 @@ client.on('messageCreate', async (message) => {
                         `🟢 \`!gachaluck\` - Tarif: **$3.500** | Jaminan: Minimal Rare (**\`R\`**, \`SR\`, \`SSR\`)\n` +
                         `🔵 \`!gachasuperluck\` - Tarif: **$15.000** | Jaminan: Minimal Super Rare (**\`SR\`**, \`SSR\`)\n` +
                         `🔥 \`!gachamegaluck\` - Tarif: **$75.000** | Jaminan: **Wajib Kasta Tertinggi (\`SSR\`)!**`, inline: false },
-                    { name: '🗂️ Manajemen Kartu', value: '`!collection` - Lemari album.\n`!charinfo [Nama]` - Cek biodata wiki MAL.\n`!topcollector` - Hall of Fame kolektor.', inline: false },
+                    { name: '🗂️ Manajemen Kartu & Deck', value: '`!collection` - Album kartu.\n`!setdeck [ID]` - Pasang/copot kartu ke Deck.\n`!deck` - Cek deck aktif (Maks 3 kartu).\n`!topcollector` - Hall of Fame kolektor.', inline: false },
                     { name: '🛒 Pasar Bursa & Black Market', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Etalase toko.\n`!buycard [Kode]` - Beli bursa player.\n`!buybm [Kode]` - Ambil selundupan pasar gelap harian.', inline: false }
                 )
                 .setFooter({ text: 'Gunakan dana tabunganmu secara bijak ya! ✨' });
             return message.reply({ embeds: [infoEmbed] });
         }
 
-        // === FITUR: !CHARINFO [NAMA KARAKTER] ===
         if (command === 'charinfo') {
             const charName = args.join(' ');
             if (!charName) {
@@ -351,7 +366,6 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // === COMMAND KUNCI HUB CHANNEL BLACK MARKET ===
         if (command === 'bmchannelset' && message.member.permissions.has('Administrator')) {
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('✖️ Format salah! Tag channel tujuannya. Contoh: `!bmchannelset #black-market`');
@@ -364,7 +378,7 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Lapak rahasia dikunci! Info selundupan Black Market harian akan dikirim otomatis ke channel ${ch}.`);
         }
 
-        // 🔮 === CORE LOGIKA BARU: MULTI-TIER LUCK GACHA ENGINE SYSTEM === 🔮
+        // 🔮 === CORE LOGIKA: MULTI-TIER LUCK GACHA ENGINE SYSTEM === 🔮
         const gachaTiers = {
             'gacha': { name: 'Normal', price: 500, allowedRarity: ['C', 'R', 'SR', 'SSR'], text: 'bebas apa aja' },
             'gachaluck': { name: 'Luck', price: 3500, allowedRarity: ['R', 'SR', 'SSR'], text: 'minimal Rare (R)' },
@@ -377,10 +391,9 @@ client.on('messageCreate', async (message) => {
             const userId = message.author.id;
 
             if (!data.economy) data.economy = {};
-            if (!data.economy[userId]) data.economy[userId] = { money: 0, lastWork: 0, cards: [] };
+            if (!data.economy[userId]) data.economy[userId] = { money: 0, lastWork: 0, cards: [], deck: [] };
             const userWallet = data.economy[userId];
 
-            // Proteksi 1: Cek isi dompet
             if (userWallet.money < config.price) {
                 return message.reply(`✖️ Dompet lu kering! Opsi gacha **!${command}** butuh dana hoki sebesar **$${config.price.toLocaleString('id-ID')}**, tabungan lu cuma ada **$${userWallet.money.toLocaleString('id-ID')}**.`);
             }
@@ -388,24 +401,19 @@ client.on('messageCreate', async (message) => {
             const loadingMsg = await message.reply(`🔮 Menghubungi bursa MyAnimeList... Menyalakan ritual **${config.name} Roll** (${config.text})...`);
 
             try {
-                // SINKRONISASI FLUID: Mengonversi nama perintah chat menjadi nama parameter di Engine baru
                 const jenisEngine = command === 'gacha' ? 'biasa' : command.replace('gacha', '');
-                
-                // Panggil 1x saja! Tidak ada loop melelahkan yang merusak API di sini
                 const hasil = await jalankanGacha(jenisEngine); 
 
-                // Fallback proteksi darurat jika database internet error parah
                 if (!hasil || !hasil.sukses) {
                     return loadingMsg.edit(`✖️ Gagal menarik takdir karakter dari MyAnimeList. Saldo lu aman tidak terpotong, coba lagi ya!`);
                 }
 
-                // Potong dana tabungan dan daftarkan kartu ke album player
                 userWallet.money -= config.price;
                 if (!userWallet.cards) userWallet.cards = [];
                 
                 const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
                 if (sudahPunya) {
-                    sudahPunya = sudahPunya.count += 1;
+                    sudahPunya.count += 1; // ✅ FIX: Penghapusan typo assignment variable crash kemarin
                 } else {
                     userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
                 }
@@ -434,6 +442,66 @@ client.on('messageCreate', async (message) => {
                 console.error("Error Core Gacha:", error);
                 return loadingMsg.edit("✖️ Terjadi kesalahan teknis internal dalam memproses transaksi gacha server.");
             }
+        }
+
+        // === FITUR BARU: !SETDECK [ID_MAL] ===
+        if (command === 'setdeck') {
+            const cardId = parseInt(args[0]);
+            const userId = message.author.id;
+
+            if (!cardId) return message.reply('✖️ Format salah! Gunakan: `!setdeck [ID_MAL]`\nContoh: `!setdeck 21`');
+
+            if (!data.economy) data.economy = {};
+            if (!data.economy[userId]) data.economy[userId] = { money: 0, cards: [], deck: [] };
+            const userWallet = data.economy[userId];
+            if (!userWallet.deck) userWallet.deck = [];
+
+            const punyaKartu = userWallet.cards.find(c => c.id === cardId);
+            if (!punyaKartu) return message.reply('✖️ Lu kagak punya kartu karakter dengan ID MAL tersebut di album lu!');
+
+            if (userWallet.deck.includes(cardId)) {
+                userWallet.deck = userWallet.deck.filter(id => id !== cardId);
+                await saveData(data);
+                return message.reply(`✅ Kartu **${punyaKartu.name}** berhasil dilepas dari deck aktif lu.`);
+            }
+
+            if (userWallet.deck.length >= 3) {
+                return message.reply('✖️ Deck lu penuh! Maksimal cuma boleh bawa **3 kartu**. Lepas salah satu kartu dulu lewat `!setdeck [ID]` baru pasang yang baru.');
+            }
+
+            userWallet.deck.push(cardId);
+            await saveData(data);
+            return message.reply(`✅ **${punyaKartu.name}** [${punyaKartu.rarity}] berhasil dipasang ke deck tempur lu! (${userWallet.deck.length}/3)`);
+        }
+
+        // === FITUR BARU: !DECK ===
+        if (command === 'deck') {
+            const userId = message.author.id;
+            const userWallet = data.economy?.[userId];
+            const activeDeck = userWallet?.deck || [];
+
+            if (activeDeck.length === 0) {
+                return message.reply('📭 Deck aktif lu masih kosong melompong. Pasang waifu/husbando andalan lu pake perintah `!setdeck [ID_MAL]`!');
+            }
+
+            let deckText = `🃏 **DECK TEMPUR AKTIF LU (${activeDeck.length}/3)** 🃏\n\n`;
+            let totalBasePower = 0;
+
+            activeDeck.forEach((id, index) => {
+                const rincianKartu = userWallet.cards.find(c => c.id === id);
+                if (rincianKartu) {
+                    deckText += `**${index + 1}. ${rincianKartu.name}** [\`${rincianKartu.rarity}\`] *(ID: \`${id}\`)*\n`;
+                    totalBasePower += rincianKartu.rarity === 'SSR' ? 100 : rincianKartu.rarity === 'SR' ? 70 : rincianKartu.rarity === 'R' ? 40 : 20;
+                }
+            });
+
+            const deckEmbed = new EmbedBuilder()
+                .setColor('#00ffbb')
+                .setTitle(`⚔️ Strategi Deck: ${message.author.username}`)
+                .setDescription(deckText + `\n📈 *Estimasi Base Power Deck: **${totalBasePower} PT***`)
+                .setFooter({ text: 'Ketik !setdeck [ID_MAL] pada kartu yang sama untuk mencopotnya.' });
+
+            return message.reply({ embeds: [deckEmbed] });
         }
 
         // === COMMAND !SELLCARD ===
@@ -647,7 +715,7 @@ client.on('messageCreate', async (message) => {
             
             data.blackMarket = [];
             for (let i = 0; i < 5; i++) {
-                const kartu = await jalankanGacha('biasa'); // Menggunakan engine baru
+                const kartu = await jalankanGacha('biasa'); 
                 if (kartu && kartu.sukses) {
                     const hargaBM = Math.floor(Math.random() * 900) + 300;
                     data.blackMarket.push({
@@ -662,7 +730,7 @@ client.on('messageCreate', async (message) => {
                 await new Promise(resolve => setTimeout(resolve, 1300));
             }
 
-            const kartuSpesial = await jalankanGacha('megaluck'); // Garansi SSR via Mega Luck
+            const kartuSpesial = await jalankanGacha('megaluck'); 
             if (kartuSpesial && kartuSpesial.sukses) {
                 const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500;
                 data.blackMarket.push({
@@ -701,7 +769,7 @@ client.on('messageCreate', async (message) => {
             return destChannel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
         }
 
-        // === COMMAND !TOPCOLLECTOR (VERSI TOP 5 CARD RARITY) ===
+        // === COMMAND !TOPCOLLECTOR ===
         if (command === 'topcollector') {
             if (!data.economy) data.economy = {};
 
@@ -955,18 +1023,44 @@ client.on('messageCreate', async (message) => {
             return message.reply(`📊 **Status Mocals Bot**\nLevel: **${userXP.level}**\nXP: **${userXP.xp}**`);
         }
 
+        // === UPGRADE LOGIKA DECK: DUEL BIASA (ADU STRATEGI DECK) ===
         if (command === 'duel') {
             const lawan = message.mentions.members.first();
             if (!lawan) return message.reply('Tag dulu lawanmu!');
             if (lawan.user.bot) return message.reply('Bot tidak bisa diajak duel! 🤖');
             if (lawan.id === message.author.id) return message.reply('Masa duel sama diri sendiri? 😅');
 
-            const menang = Math.random() < 0.5 ? message.author.username : lawan.user.username;
-            const kalah = menang === message.author.username ? lawan.user.username : message.author.username;
-            
-            message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}** untuk duel maut!`);
-            setTimeout(() => message.channel.send(`💥 JLEB! Pertarungan berlangsung sengit...`), 1500);
-            return setTimeout(() => message.channel.send(`🏆 Hasilnya: **${menang}** berhasil mengalahkan **${kalah}**!`), 3500);
+            const deckPenantang = data.economy?.[message.author.id]?.deck || [];
+            if (deckPenantang.length === 0) {
+                return message.reply('✖️ Lu belum nyusun deck tempur lu! Atur dulu waifu andalan lu pake `!setdeck [ID]`.');
+            }
+
+            const deckLawan = data.economy?.[lawan.id]?.deck || [];
+            if (deckLawan.length === 0) {
+                return message.reply(`✖️ Gak bisa ditantang! <@${lawan.id}> belum menyusun deck aktifnya.`);
+            }
+
+            // Jalankan simulasi tarung instan tanpa taruhan koin
+            let powerPenantang = 0;
+            deckPenantang.forEach(id => {
+                const k = data.economy[message.author.id].cards.find(c => c.id === id);
+                if (k) powerPenantang += hitungPowerKartu(k.rarity);
+            });
+
+            let powerLawan = 0;
+            deckLawan.forEach(id => {
+                const k = data.economy[lawan.id].cards.find(c => c.id === id);
+                if (k) powerLawan += hitungPowerKartu(k.rarity);
+            });
+
+            const pemenang = powerPenantang > powerLawan ? message.author.username : lawan.user.username;
+            const pecundang = pemenang === message.author.username ? lawan.user.username : message.author.username;
+
+            message.channel.send(`⚔️ **${message.author.username}** menantang **${lawan.user.username}** untuk adu formasi deck kartu!`);
+            setTimeout(() => message.channel.send(`💥 *JLEB! Efek sinergi bertubrukan, angka kalkulator perang bergulir...*`), 1500);
+            return setTimeout(() => {
+                message.channel.send(`🏆 **Hasil Pertandingan Album:**\n┣ 📊 Power Deck **${message.author.username}**: \`${powerPenantang} PT\`\n┣ 📊 Power Deck **${lawan.user.username}**: \`${powerLawan} PT\`\n\n👑 Selamat **${pemenang}** berhasil menggilas formasi deck milik **${pecundang}**!`);
+            }, 3500);
         }
 
         if (command === '8ball') {
@@ -1097,35 +1191,76 @@ client.on('messageCreate', async (message) => {
             return;
         }
 
+        // === UPGRADE LOGIKA DECK: TARUHAN COIN !BIT ===
         if (command === 'bit') {
             const lawan = message.mentions.members.first();
             const jumlah = parseInt(args[1]);
             
-            if (!lawan || !jumlah) return message.reply('Format: !bit @user [jumlah]');
+            if (!lawan || !jumlah || jumlah <= 0) return message.reply('Format: !bit @user [jumlah_taruhan]');
             if (lawan.id === message.author.id) return message.reply('Gak bisa lawan diri sendiri!');
+
+            const deckPenantang = data.economy?.[message.author.id]?.deck || [];
+            if (deckPenantang.length === 0) return message.reply('✖️ Deck lu kosong! Pasang kartu andalan dulu pake `!setdeck [ID]`.');
+
+            const deckLawan = data.economy?.[lawan.id]?.deck || [];
+            if (deckLawan.length === 0) return message.reply(`✖️ <@${lawan.id}> belum menyusun deck aktifnya, tidak bisa diajak judi bit.`);
+
             if (activeDuels[lawan.id]) return message.reply('Lawan sedang ditantang orang lain, tunggu ya!');
             activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
-            message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} sebesar **${jumlah}**! Ketik \`!confirm\` atau \`!reject\` dalam 1 menit.`);
+            message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} bertaruh judi deck sebesar **$${jumlah}**! Ketik \`!confirm\` atau \`!reject\` dalam 1 menit.`);
             return setTimeout(() => {
                 if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
                     delete activeDuels[lawan.id];
-                    message.channel.send(`⏳ Tantangan dari ${message.author} untuk ${lawan} telah dibatalkan karena tidak direspons.`);
+                    message.channel.send(`⏳ Tantangan taruhan dari ${message.author} untuk ${lawan} kedaluwarsa.`);
                 }
             }, 60000);
         }
 
+        // === UPGRADE LOGIKA DECK: CONFIRM TARUHAN (HITUNG POWER DECK) ===
         if (command === 'confirm') {
             const duel = activeDuels[message.author.id];
             if (!duel) return message.reply('Kamu tidak sedang ditantang!');
-            const menangId = Math.random() < 0.5 ? message.author.id : duel.penantang;
-            const kalahId = menangId === message.author.id ? duel.penantang : message.author.id;
-            if (!data.economy) data.economy = {};
-            if (!data.economy[menangId]) data.economy[menangId] = { money: 0 };
-            if (!data.economy[kalahId]) data.economy[kalahId] = { money: 0 };
+            
+            const idLawan = message.author.id; 
+            const idPenantang = duel.penantang; 
+
+            const deckLawan = data.economy?.[idLawan]?.deck || [];
+            const deckPenantang = data.economy?.[idPenantang]?.deck || [];
+
+            if (deckLawan.length === 0) return message.reply('✖️ Gak bisa mulai, deck aktif lu kosong! Atur dulu lewat `!setdeck`.');
+
+            // 1. Kalkulasi Deck Penantang
+            let powerPenantang = 0;
+            deckPenantang.forEach(id => {
+                const k = data.economy[idPenantang].cards.find(c => c.id === id);
+                if (k) powerPenantang += hitungPowerKartu(k.rarity);
+            });
+
+            // 2. Kalkulasi Deck Lawan
+            let powerLawan = 0;
+            deckLawan.forEach(id => {
+                const k = data.economy[idLawan].cards.find(c => c.id === id);
+                if (k) powerLawan += hitungPowerKartu(k.rarity);
+            });
+
+            const menangId = powerPenantang > powerLawan ? idPenantang : idLawan;
+            const kalahId = menangId === idLawan ? idPenantang : idLawan;
+
+            if ((data.economy[idPenantang]?.money || 0) < duel.jumlah || (data.economy[idLawan]?.money || 0) < duel.jumlah) {
+                delete activeDuels[message.author.id];
+                return message.channel.send('✖️ Pertarungan dibatalkan karena salah satu pihak kehabisan uang sebelum tanding.');
+            }
+
             data.economy[menangId].money += duel.jumlah;
             data.economy[kalahId].money -= duel.jumlah;
             await saveData(data);
-            message.channel.send(`🏆 Pertarungan selesai! Pemenangnya adalah <@${menangId}> dan mendapatkan **${duel.jumlah}**!`);
+
+            let battleText = `🏆 **JUDI BIT DECK KARTU SELESAI!** 🏆\n\n`;
+            battleText += `⚔️ **Deck Penantang (<@${idPenantang}>)**: Total Power \`${powerPenantang} PT\`\n`;
+            battleText += `🛡️ **Deck Lawan (<@${idLawan}>)**: Total Power \`${powerLawan} PT\`\n\n`;
+            battleText += `👑 Selamat untuk <@${menangId}> karena formasi deck lu menang unggul dan berhak merampas koin taruhan sebesar **$${duel.jumlah}**!`;
+
+            message.channel.send(battleText);
             delete activeDuels[message.author.id];
             return;
         }
