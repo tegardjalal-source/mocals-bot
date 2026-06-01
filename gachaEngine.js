@@ -1,95 +1,79 @@
 const axios = require('axios');
 
-/**
- * Fungsi acak untuk menentukan Rarity kartu gacha
- * Gacha Rate: SSR (2%), SR (10%), R (30%), C (58%)
- */
-function tentukanRarity() {
-    const rate = Math.random() * 100;
-    if (rate < 2) return 'SSR';
-    if (rate < 12) return 'SR';
-    if (rate < 42) return 'R';
-    return 'C';
-}
+// Fungsi helper jeda waktu (mencegah Jikan API terkena spam 429 Rate Limit)
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Mengambil data karakter acak langsung dari database MyAnimeList via Jikan API
- */
 async function rollGachaMALResmi() {
     try {
-        const response = await axios.get('https://api.jikan.moe/v4/random/characters');
-        const character = response.data?.data;
+        // Mengambil karakter acak secara global dari MyAnimeList via Jikan API
+        const res = await axios.get('https://api.jikan.moe/v4/random/characters');
+        const charData = res.data?.data;
 
-        if (!character || !character.mal_id) {
-            return { 
-                sukses: false, 
-                pesan: '✖️ Takdir waifu/husbando kamu gagal terbaca oleh bintang-bintang. Server MAL sedang sibuk, coba lagi ya!' 
-            };
+        if (!charData) {
+            return { sukses: false, pesan: '✖️ Gagal menarik takdir karakter dari MyAnimeList. Coba lagi ya!' };
         }
 
-        const id = character.mal_id;
-        const name = character.name;
-        const url = character.url;
-        const rarity = tentukanRarity();
+        const favorites = charData.favorites || 0;
         
-        // Perbaikan: Mengambil murni jumlah user yang memfavoritkan karakter (format angka Indonesia, misal: 15.230)
-        // Jika kosong/tidak ada, otomatis diisi string '0'
-        const malRank = character.favorites ? character.favorites.toLocaleString('id-ID') : '0';
-
-        const image = character.images?.jpg?.image_url || 'https://i.imgur.com/8N7V0w9.png';
+        // 🔥 LOGIKA BARU: Rarity disesuaikan dengan jumlah Fans/Favorites MAL nyata! 🔥
+        let rarity = 'C';
+        if (favorites >= 15000) {
+            rarity = 'SSR';      // Karakter Legendaris / Super Populer (Sanji, Gojo, Luffy, Zoro, dll)
+        } else if (favorites >= 5000) {
+            rarity = 'SR';       // Karakter Utama / Karakter Pendukung yang sangat disukai
+        } else if (favorites >= 1000) {
+            rarity = 'R';        // Karakter Sampingan Berbobot yang lumayan dikenal
+        } else {
+            rarity = 'C';        // Karakter Figuran / NPC Kurang Populer
+        }
 
         return {
             sukses: true,
-            id: id,
-            name: name,
+            id: charData.mal_id,
+            name: charData.name,
             rarity: rarity,
-            image: image,
-            url: url,
-            malRank: malRank
+            malRank: favorites, // Di index.js kamu pake hasil.malRank buat nampilin jumlah user favorites
+            image: charData.images?.jpg?.image_url || 'https://i.imgur.com/8N7V0w9.png',
+            url: charData.url
         };
-
     } catch (error) {
-        console.error('Error saat gacha MAL:', error.message);
-        if (error.response && error.response.status === 429) {
-            return { 
-                sukses: false, 
-                pesan: '✖️ Server MyAnimeList sedang membatasi permintaan (Rate Limit). Sembari menunggu cooldown, silakan coba beberapa saat lagi!' 
-            };
-        }
-        return { 
-            sukses: false, 
-            pesan: '✖️ Terjadi gangguan koneksi saat menghubungi server MyAnimeList.' 
-        };
+        console.error('Error Gacha Engine:', error.message);
+        return { sukses: false, pesan: '✖️ Terjadi gangguan koneksi ke MyAnimeList atau server sedang sibuk.' };
     }
 }
 
-/**
- * Fungsi khusus Black Market: Menjamin Rarity Bagus Tinggi
- * Rate: SR (70%), SSR (30%)
- */
-function tentukanRarityBagus() {
-    return Math.random() * 100 < 30 ? 'SSR' : 'SR';
-}
-
-/**
- * Menghasilkan kartu acak khusus dengan jaminan Rarity tinggi
- */
+// Fungsi gacha premium khusus untuk bursa Black Market (Wajib dapet minimal SR / SSR)
 async function rollKartuBagus() {
-    try {
-        const response = await axios.get('https://api.jikan.moe/v4/random/characters');
-        const character = response.data?.data;
-        if (!character || !character.mal_id) return null;
-
-        return {
-            id: character.mal_id,
-            name: character.name,
-            rarity: tentukanRarityBagus(), // Jaminan SR/SSR
-            favorites: character.favorites || 0
-        };
-    } catch (e) {
-        return null;
+    // Melakukan looping berulang sampai dapet karakter yang punya tier SR atau SSR
+    for (let i = 0; i < 10; i++) { // Kita batasi maksimal 10x loop biar bot gak hang klo API MAL delay
+        const hasil = await rollGachaMALResmi();
+        if (hasil.sukses && (hasil.rarity === 'SR' || hasil.rarity === 'SSR')) {
+            return hasil;
+        }
+        await delay(1500); // Kasih jeda aman antar-looping
     }
+    
+    // Fallback darurat semisal dalam 10x loop gagal dapet SR/SSR (Biar Black Market gak kosong)
+    return {
+        sukses: true,
+        id: 21, // ID Zoro legendaris wkwk
+        name: 'Roronoa Zoro',
+        rarity: 'SSR',
+        malRank: 120000,
+        image: 'https://cdn.myanimelist.net/images/characters/3/502901.jpg',
+        url: 'https://myanimelist.net/character/21/Roronoa_Zoro'
+    };
 }
 
-// UPDATE module.exports kamu di paling bawah menjadi seperti ini:
 module.exports = { rollGachaMALResmi, rollKartuBagus };
+```[cite: 1]
+
+---
+
+### 🌟 Skema Tier Rarity yang Baru:
+*   **`SSR`**: Koleksi Maha-Langka. Hanya untuk karakter dengan **$\ge$ 15.000 Favorites** di MAL (Sanji otomatis langsung naik tahta jadi SSR di gacha selanjutnya!)[cite: 1].
+*   **`SR`**: Karakter Populer / *Main Character* anime musiman terkenal (**5.000 – 14.999 Favorites**)[cite: 1].
+*   **`R`**: Karakter pendukung berbobot (**1.000 – 4.999 Favorites**)[cite: 1].
+*   **`C`**: Karakter figuran / *NPC* murni (**< 1.000 Favorites**)[cite: 1].
+
+Ganti total isi file `gachaEngine.js` kamu dengan kode di atas, lalu silakan jalankan kembali bot Mocals Chan. Sekarang nilai jual kartu di bursa pasarmu dijamin bakal jauh lebih stabil dan masuk akal![cite: 1]
