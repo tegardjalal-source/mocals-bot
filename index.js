@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ChannelType } = require('discord.js');
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
@@ -13,7 +13,7 @@ async function fetchData() {
     try {
         const res = await axios.get(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': MASTER_KEY } });
         isDatabaseLoaded = true;
-        return res.data.record;
+        return res.data.record || {};
     } catch (e) { 
         console.error("Gagal memuat database saat startup:", e.message);
         throw e; 
@@ -64,10 +64,11 @@ async function checkYouTubeLiveStreams() {
         try {
             const playlistId = 'UU' + channelId.substring(2);
             const res = await youtube.playlistItems.list({ playlistId, part: 'snippet', maxResults: 1 });
-            if (!res.data.items.length) continue;
+            if (!res.data.items || !res.data.items.length) continue;
             
             const videoId = res.data.items[0].snippet.resourceId.videoId;
             const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' });
+            if (!videoRes.data.items || !videoRes.data.items.length) continue;
             
             const isLive = videoRes.data.items[0].snippet.liveBroadcastContent === 'live';
             if (isLive && !notifiedVideosCache.has(videoId)) {
@@ -75,7 +76,7 @@ async function checkYouTubeLiveStreams() {
                 for (const guildId in globalDbCache.serverSettings) {
                     const logChannelId = globalDbCache.serverSettings[guildId].ytLogChannel;
                     if (logChannelId) {
-                        const channel = client.channels.cache.get(logChannelId);
+                        const channel = client.channels.cache.get(logChannelId) || await client.channels.fetch(logChannelId).catch(() => null);
                         if (channel) {
                             channel.send(`@everyone 🚨 **Ada yang lagi live nihh, jangan lupa mampir yaa...** https://www.youtube.com/watch?v=${videoId}`);
                         }
@@ -96,14 +97,14 @@ async function checkYouTubeLiveStreams() {
 async function updateBotStatus() {
     try {
         const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
-        client.user.setActivity(`🍀 Memantau ${totalMembers} member di semua server`, { type: ActivityType.Custom });
+        client.user.setActivity(`🍀 Memantau ${totalMembers} member`, { type: ActivityType.Custom });
     } catch (e) { console.error('Gagal update status:', e); }
 }
 
 async function sendUpdateLog(guild, content) {
     const logChannelId = globalDbCache.serverSettings?.[guild.id]?.logChannelId;
     if (!logChannelId) return;
-    const channel = guild.channels.cache.get(logChannelId);
+    const channel = guild.channels.cache.get(logChannelId) || await guild.channels.fetch(logChannelId).catch(() => null);
     if (channel) {
         channel.send({
             embeds: [new EmbedBuilder().setColor(0x00FF00).setTitle('🚀 Update Fitur Bot').setDescription(content).setTimestamp()]
@@ -127,18 +128,20 @@ client.once('ready', async () => {
             console.log("🔒 Cache status switch sistem keamanan server berhasil disinkronkan.");
         }
 
-        checkYouTubeLiveStreams();
+        await checkYouTubeLiveStreams();
         setInterval(checkYouTubeLiveStreams, 60000);
+        
         client.guilds.cache.forEach(async (guild) => {
             await guild.members.fetch().catch(() => console.log(`Gagal memuat member cache untuk guild: ${guild.name}`));
         });
 
-        updateBotStatus();
+        await updateBotStatus();
         setInterval(updateBotStatus, 60000);
 
+        // Jangan save per 30 detik (bisa terkena rate limit JSONBin), disarankan per 5-10 menit. Diubah ke 5 menit (300000ms).
         setInterval(async () => {
             await saveData(globalDbCache);
-        }, 30000);
+        }, 300000);
     } catch (err) {
         console.error("Bot gagal inisialisasi karena database error. Proses dihentikan.");
         process.exit(1);
@@ -148,21 +151,23 @@ client.once('ready', async () => {
 cron.schedule('0 0 * * *', async () => {
     console.log("🔄 Jam 00:00: Mengeksekusi rutinitas harian di semua server...");
     
-    const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace('/', '-'); 
+    const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace(/\//g, '-'); 
     for (const [guildId, guild] of client.guilds.cache) {
         try {
-            for (const userId in globalDbCache.hbd) {
-                if (globalDbCache.hbd[userId] === today) {
-                    const member = await guild.members.fetch(userId).catch(() => null);
-                    if (member) {
-                        const hbdRoleId = globalDbCache.serverSettings?.[guildId]?.hbdRoleId; 
-                        if (hbdRoleId) {
-                            await member.roles.add(hbdRoleId).catch(console.error);
-                        }
+            if (globalDbCache.hbd) {
+                for (const userId in globalDbCache.hbd) {
+                    if (globalDbCache.hbd[userId] === today) {
+                        const member = await guild.members.fetch(userId).catch(() => null);
+                        if (member) {
+                            const hbdRoleId = globalDbCache.serverSettings?.[guildId]?.hbdRoleId; 
+                            if (hbdRoleId) {
+                                await member.roles.add(hbdRoleId).catch(console.error);
+                            }
 
-                        const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === 0);
-                        if (channel) {
-                            channel.send(`🎉 Selamat ulang tahun <@${userId}>! Semoga harimu menyenangkan! 🎂`);
+                            const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === ChannelType.GuildText);
+                            if (channel) {
+                                channel.send(`🎉 Selamat ulang tahun <@${userId}>! Semoga harimu menyenangkan! 🎂`);
+                            }
                         }
                     }
                 }
@@ -201,7 +206,7 @@ cron.schedule('0 0 * * *', async () => {
             }
 
             const targetChannelId = globalDbCache.serverSettings?.[guildId]?.bmChannelId;
-            const bmChannel = targetChannelId ? guild.channels.cache.get(targetChannelId) : (guild.systemChannel || guild.channels.cache.find(c => c.type === 0));
+            const bmChannel = targetChannelId ? (guild.channels.cache.get(targetChannelId) || await guild.channels.fetch(targetChannelId).catch(() => null)) : (guild.systemChannel || guild.channels.cache.find(c => c.type === ChannelType.GuildText));
 
             if (bmChannel && globalDbCache.blackMarketServers[guildId].length > 0) {
                 let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (BERLAKU 24 JAM)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
@@ -261,7 +266,7 @@ client.on('messageCreate', async (message) => {
                     const messagesToDelete = fetchedMessages.filter(m => m.author.id === userId);
 
                     if (messagesToDelete.size > 0) {
-                        await message.channel.bulkDelete(messagesToDelete, true);
+                        await message.channel.bulkDelete(messagesToDelete, true).catch(() => null);
                     }
 
                     if (message.member && message.member.kickable) {
@@ -366,7 +371,7 @@ client.on('messageCreate', async (message) => {
                     { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
                 )
                 .setThumbnail(client.user.displayAvatarURL())
-                    .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
+                .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
             return message.reply({ embeds: [infoEmbed] });
         }
 
@@ -527,7 +532,7 @@ client.on('messageCreate', async (message) => {
                 
                 const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
                 if (sudahPunya) {
-                    sudahPunya.count += 1;
+                    sudahPunya.count = (sudahPunya.count || 1) + 1;
                 } else {
                     userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
                 }
@@ -540,7 +545,7 @@ client.on('messageCreate', async (message) => {
                         { name: 'Nama Karakter', value: `**${hasil.name}**`, inline: true },
                         { name: 'Rarity', value: `✨ **${hasil.rarity}**`, inline: true },
                         { name: '🆔 ID MAL Karakter', value: `\`${hasil.id}\``, inline: true },
-                        { name: '❤️ Total Penggemar', value: `👤 **${hasil.malRank.toLocaleString('id-ID')} User**`, inline: true },
+                        { name: '❤️ Total Penggemar', value: `👤 **${(hasil.malRank || 0).toLocaleString('id-ID')} User**`, inline: true },
                         { name: 'Sisa Uangmu', value: `💰 **$${userWallet.money.toLocaleString('id-ID')}**`, inline: false }
                     )
                     .setImage(hasil.image)
@@ -737,7 +742,7 @@ client.on('messageCreate', async (message) => {
             if (!buyerWallet.cards) buyerWallet.cards = [];
             const sudahPunya = buyerWallet.cards.find(c => c.id === itemGacha.id);
             if (sudahPunya) {
-                sudahPunya.count += 1;
+                sudahPunya.count = (sudahPunya.count || 1) + 1;
             } else {
                 buyerWallet.cards.push({ id: itemGacha.id, name: itemGacha.name, rarity: itemGacha.rarity, count: 1 });
             }
@@ -789,7 +794,7 @@ client.on('messageCreate', async (message) => {
             if (!buyerWallet.cards) buyerWallet.cards = [];
             const sudahPunya = buyerWallet.cards.find(c => c.id === itemBM.id);
             if (sudahPunya) {
-                sudahPunya.count += 1;
+                sudahPunya.count = (sudahPunya.count || 1) + 1;
             } else {
                 buyerWallet.cards.push({ id: itemBM.id, name: itemBM.name, rarity: itemBM.rarity, count: 1 });
             }
@@ -847,7 +852,7 @@ client.on('messageCreate', async (message) => {
             }
 
             const targetChannelId = data.serverSettings?.[guildId]?.bmChannelId;
-            const destChannel = targetChannelId ? message.guild.channels.cache.get(targetChannelId) : message.channel;
+            const destChannel = targetChannelId ? (message.guild.channels.cache.get(targetChannelId) || await message.guild.channels.fetch(targetChannelId).catch(() => message.channel)) : message.channel;
 
             let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (TEST MODE)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
             data.blackMarketServers[guildId].forEach((item) => {
@@ -866,7 +871,7 @@ client.on('messageCreate', async (message) => {
                 .setDescription(bmText)
                 .setTimestamp();
 
-            await loadingBM.delete();
+            await loadingBM.delete().catch(() => null);
             return destChannel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
         }
 
@@ -1001,7 +1006,7 @@ client.on('messageCreate', async (message) => {
             message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
             const channels = data.ytChannels || [];
             const logChannelId = data.serverSettings?.[guildId]?.ytLogChannel;
-            const targetChannel = logChannelId ? client.channels.cache.get(logChannelId) : null;
+            const targetChannel = logChannelId ? (client.channels.cache.get(logChannelId) || await client.channels.fetch(logChannelId).catch(() => null)) : null;
 
             if (!logChannelId || !targetChannel) {
                 return message.channel.send('❌ Channel notifikasi belum diatur. Gunakan `!setchannelnotif #channel`!');
@@ -1012,7 +1017,7 @@ client.on('messageCreate', async (message) => {
                 try {
                     const playlistId = 'UU' + channelId.substring(2);
                     const res = await youtube.playlistItems.list({ playlistId, part: 'snippet', maxResults: 1 });
-                    if (!res.data.items.length) continue;
+                    if (!res.data.items || !res.data.items.length) continue;
                     
                     const videoId = res.data.items[0].snippet.resourceId.videoId;
                     const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' });
@@ -1080,7 +1085,8 @@ client.on('messageCreate', async (message) => {
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel!');
             if (!data.serverSettings) data.serverSettings = {};
-            data.serverSettings[guildId] = { logChannelId: ch.id };
+            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
+            data.serverSettings[guildId].logChannelId = ch.id;
             return message.reply(`✅ Log diatur ke ${ch}`);
         }
         
@@ -1260,7 +1266,7 @@ client.on('messageCreate', async (message) => {
         if (command === 'money') {
             if (!data.economy) data.economy = {};
             const user = data.economy[message.author.id] || { money: 0 };
-            return message.reply(`💰 Saldo kamu saat ini: **${user.money}**`);
+            return message.reply(`💰 Saldo kamu saat ini: **$${(user.money || 0).toLocaleString('id-ID')}**`);
         }
 
         if (command === 'reject') {
@@ -1276,17 +1282,18 @@ client.on('messageCreate', async (message) => {
 
         if (command === 'work') {
             if (!data.economy) data.economy = {};
-            const user = data.economy[message.author.id] || { money: 0, lastWork: 0 };
+            if (!data.economy[message.author.id]) data.economy[message.author.id] = { money: 0, lastWork: 0, cards: [], deck: [] };
+            const user = data.economy[message.author.id];
             const now = Date.now();
-            if (now - user.lastWork < 300000) {
+            if (now - (user.lastWork || 0) < 300000) {
                 return message.reply('⏳ Kamu capek! Istirahat dulu 5 menit.');
             }
             
             const reward = Math.floor(Math.random() * 500) + 100;
-            user.money += reward;
+            user.money = (user.money || 0) + reward;
             user.lastWork = now; 
             data.economy[message.author.id] = user;
-            return message.reply(`💼 Kamu bekerja dan mendapatkan **${reward}**!`);
+            return message.reply(`💼 Kamu bekerja dan mendapatkan **$${reward}**!`);
         }
 
         if (command === 'gamble') {
@@ -1299,10 +1306,10 @@ client.on('messageCreate', async (message) => {
             const win = Math.random() < 0.45;
             if (win) {
                 user.money += amount;
-                message.reply(`🎰 Menang! Kamu dapat **${amount}**. Saldo: ${user.money}`);
+                message.reply(`🎰 Menang! Kamu dapat **$${amount}**. Saldo: $${user.money}`);
             } else {
                 user.money -= amount;
-                message.reply(`💸 Kalah! Kamu kehilangan **${amount}**. Saldo: ${user.money}`);
+                message.reply(`💸 Kalah! Kamu kehilangan **$${amount}**. Saldo: $${user.money}`);
             }
             data.economy[message.author.id] = user;
             return;
@@ -1406,7 +1413,7 @@ client.on('messageCreate', async (message) => {
                 .slice(0, 5);
             let text = '🏆 **Top 5 Orang Terkaya**:\n';
             for (let i = 0; i < sorted.length; i++) {
-                text += `${i+1}. <@${sorted[i][0]}>: **${sorted[i][1].money || 0}**\n`;
+                text += `${i+1}. <@${sorted[i][0]}>: **$${(sorted[i][1].money || 0).toLocaleString('id-ID')}**\n`;
             }
             return message.reply(text);
         }
@@ -1418,7 +1425,7 @@ client.on('guildMemberAdd', async (member) => {
     const welcomeId = serverData ? serverData.welcomeId : null;
 
     if (welcomeId) {
-        const ch = member.guild.channels.cache.get(welcomeId);
+        const ch = member.guild.channels.cache.get(welcomeId) || await member.guild.fetch(welcomeId).catch(() => null);
         if (ch) ch.send(`Welcome imoet ${member}! ✨`);
     }
 });
@@ -1428,7 +1435,7 @@ client.on('guildMemberRemove', async (member) => {
     const leaveId = serverData ? serverData.leaveId : null;
 
     if (leaveId) {
-        const ch = member.guild.channels.cache.get(leaveId);
+        const ch = member.guild.channels.cache.get(leaveId) || await member.guild.fetch(leaveId).catch(() => null);
         if (ch) ch.send(`Dadah ${member.user.tag}, sampai jumpa lagi! 😢`);
     }
 });
