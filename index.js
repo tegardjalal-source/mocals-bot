@@ -6,10 +6,6 @@ const { google } = require('googleapis');
 // Mengimpor Engine Baru Berbasis Akurasi Tingkat Hoki (Anti Rate-Limit)
 const { jalankanGacha } = require('./gachaEngine');
 
-// === IMPORT LIBRARY MUSIK BARU ===
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
-const play = require('play-dl');
-
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
 
@@ -39,8 +35,7 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates // 🔥 WAJIB: Ditambahkan agar bot bisa mendeteksi & masuk Voice Channel
+        GatewayIntentBits.MessageContent
     ]
 });
 
@@ -57,40 +52,14 @@ const securityDisabledGuilds = new Set();
 // 🔥 OPTIMASI UTAMA: Variable database global yang disimpan langsung di RAM Bot
 let globalDbCache = {};
 
-// 🔥 GLOBAL MUSIC QUEUE: Menyimpan antrean lagu tiap server di dalam RAM
-const musicQueues = new Map();
-
 const youtube = google.youtube({
     version: 'v3',
     auth: process.env.YOUTUBE_API_KEY
 });
 
-// === HELPER FUNCTION: ENGINE UTAMA PEMUTAR AUDIO ===
-async function putarLagu(guildId, song) {
-    const queue = musicQueues.get(guildId);
-    if (!song) {
-        if (queue.connection) queue.connection.destroy();
-        musicQueues.delete(guildId);
-        return;
-    }
-
-    try {
-        // Mengambil stream audio langsung dari YouTube secara aman lewat play-dl
-        const stream = await play.stream(song.url);
-        const resource = createAudioResource(stream.stream, { inputType: stream.type });
-        
-        queue.player.play(resource);
-        queue.textChannel.send(`🎵 Sekarang memutar: **${song.title}** 🚀`);
-    } catch (error) {
-        console.error("Error saat streaming lagu:", error);
-        queue.textChannel.send(`❌ Gagal memutar lagu **${song.title}**. Otomatis skip ke lagu berikutnya...`);
-        queue.songs.shift();
-        putarLagu(guildId, queue.songs[0]);
-    }
-}
-
 // === ANTI-SPAM YOUTUBE LIVE ===
 async function checkYouTubeLiveStreams() {
+    // Menggunakan database RAM, bukan request API eksternal
     const channels = globalDbCache.ytChannels || [];
 
     for (const channelId of channels) {
@@ -152,9 +121,11 @@ async function sendUpdateLog(guild, content) {
 client.once('ready', async () => {
     console.log(`${client.user.tag} sudah siap beraksi!`);
     
+    // 1. Ambil seluruh data JSONBin SEKALI SAJA saat bot menyala, lalu simpan ke RAM
     globalDbCache = await fetchData();
     console.log("📦 Seluruh data dari JSONBin sukses dimuat ke RAM Bot.");
 
+    // 2. Sinkronisasikan status keamanan server ke RAM Cache
     if (globalDbCache.serverSettings) {
         for (const guildId in globalDbCache.serverSettings) {
             if (globalDbCache.serverSettings[guildId].securityDisabled === true) {
@@ -175,6 +146,7 @@ client.once('ready', async () => {
     updateBotStatus();
     setInterval(updateBotStatus, 60000);
 
+    // 3. AUTO-SAVE SYSTEM: Otomatis menyalin data dari RAM ke JSONBin secara berkala tiap 30 detik
     setInterval(async () => {
         await saveData(globalDbCache);
         console.log("💾 [Auto-Save] Data RAM berhasil dicadangkan ke JSONBin harian.");
@@ -186,6 +158,7 @@ cron.schedule('0 0 * * *', async () => {
     const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return;
 
+    // 1. Logika Selamat Ulang Tahun
     const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace('/', '-'); 
 
     for (const userId in globalDbCache.hbd) {
@@ -203,6 +176,7 @@ cron.schedule('0 0 * * *', async () => {
         }
     }
 
+    // 2. Logika Bursa Gelap (Black Market) Otomatis
     console.log("🔄 Jam 00:00: Meriset barang di Black Market...");
     globalDbCache.blackMarket = [];
 
@@ -234,6 +208,8 @@ cron.schedule('0 0 * * *', async () => {
             isPremium: true
         });
     }
+
+    // Sistem akan tersimpan otomatis via Auto-Save harian, tidak perlu saveData manual di sini
 
     const targetChannelId = globalDbCache.serverSettings?.[guild.id]?.bmChannelId;
     const bmChannel = targetChannelId ? guild.channels.cache.get(targetChannelId) : (guild.systemChannel || guild.channels.cache.find(c => c.type === 0));
@@ -272,8 +248,9 @@ client.on('messageCreate', async (message) => {
             const userId = message.author.id;
             const now = Date.now();
             
-            const LIMIT = 3;        
-            const TIME_WINDOW = 8000; 
+            // 💡 ANGKA TESTING MANUAL: Diubah agar pengetikan tangan manusia keburu memicu bot
+            const LIMIT = 3;        // Pesan ke-4 dikirim langsung di-kick
+            const TIME_WINDOW = 8000; // Rentang waktu dilonggarkan jadi 8 detik agar keburu dicoba manual
 
             if (!messageCounts.has(userId)) {
                 messageCounts.set(userId, []);
@@ -287,6 +264,7 @@ client.on('messageCreate', async (message) => {
 
             if (recentMessages.length > LIMIT) {
                 try {
+                    // OPTIMASI: Melacak sampai 50 chat terakhir agar tidak ada chat spam tersisa
                     const fetchedMessages = await message.channel.messages.fetch({ limit: 50 });
                     const messagesToDelete = fetchedMessages.filter(m => m.author.id === userId);
 
@@ -341,6 +319,7 @@ client.on('messageCreate', async (message) => {
         command = args.shift().toLowerCase();
     }
 
+    // Pembacaan data dialihkan ke RAM lokal cache agar bot super kencang tanpa lag internet
     let data = globalDbCache; 
 
     // === KELOMPOK COMMAND 1: CORE & ADMIN CONFIG (TIDAK DAPAT XP) ===
@@ -352,7 +331,6 @@ client.on('messageCreate', async (message) => {
                 .setDescription('Halo! Ini adalah daftar perintah lengkap yang bisa kamu gunakan di server:')
                 .addFields(
                     { name: 'ℹ️ Hiburan & Informasi', value: '`!ping`, `!halo`, `!gabutnih`, `!rank`, `!8ball`, `!coinflip`, `!remind`, `!userinfo`, `!serverinfo`, `!status`, `!info`', inline: false },
-                    { name: '🎵 Pemutar Musik Hoki', value: '`!play [Judul/Link YouTube]` - Putar musik ke VC.\n`!skip` - Lewati lagu aktif.\n`!stop` / `!leave` - Matikan musik & keluarkan bot.\n`!queue` - Lihat daftar antrean lagu server.', inline: false },
                     { name: '💰 Ekonomi & Toko Pasar', value: '`!money`, `!work`, `!gamble`, `!leaderboard`, `!givecash`', inline: false },
                     { name: '⚔️ Duel Formasi Deck & Taruhan', value: '`!setdeck [ID_MAL]` (Pasang/copot kartu), `!deck` (Cek deck), `!duel @user` (Latihan), `!bit @user [jumlah]` (Taruhan koin), `!confirm`, `!reject`', inline: false },
                     { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`', inline: false },
@@ -398,7 +376,6 @@ client.on('messageCreate', async (message) => {
                     { name: '✨ Dibuat dengan', value: 'Node.js & Discord.js', inline: true },
                     { name: '💖 Motoku', value: 'Selalu siap membantu dengan semangat!', inline: true }
                 )
-                .setTimestamp()
                 .setFooter({ text: 'Senang bisa melayani kalian di sini! ✨' });
             return message.reply({ embeds: [infoEmbed] });
         }
@@ -483,6 +460,7 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Lapak rahasia dikunci! Info selundupan Black Market harian akan dikirim otomatis ke channel ${ch}.`);
         }
 
+        // === FITUR COMMAND ADMIN KHUSUS: MENGATUR SWITCH ON/OFF KEAMANAN ===
         if (command === 'enablesecurity' && message.member.permissions.has('Administrator')) {
             if (!data.serverSettings) data.serverSettings = {};
             if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
@@ -567,6 +545,7 @@ client.on('messageCreate', async (message) => {
             }
         }
 
+        // === FITUR BARU: !SETDECK [ID_MAL] ===
         if (command === 'setdeck') {
             const cardId = parseInt(args[0]);
             const userId = message.author.id;
@@ -594,6 +573,7 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ **${punyaKartu.name}** [${punyaKartu.rarity}] berhasil dipasang ke deck tempur lu! (${userWallet.deck.length}/3)`);
         }
 
+        // === FITUR BARU: !DECK ===
         if (command === 'deck') {
             const userId = message.author.id;
             const userWallet = data.economy?.[userId];
@@ -623,6 +603,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [deckEmbed] });
         }
 
+        // === COMMAND !SELLCARD ===
         if (command === 'sellcard') {
             const cardId = parseInt(args[0]);
             const hargaJual = parseInt(args[1]);
@@ -681,6 +662,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [sellEmbed] });
         }
 
+        // === COMMAND !MARKETLIST ===
         if (command === 'marketlist') {
             if (!data.market || data.market.length === 0) {
                 return message.reply('📭 Bursa pasar kartu saat ini lagi kosong melompong. Belum ada yang jualan nih!');
@@ -709,6 +691,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [marketListEmbed] });
         }
 
+        // === COMMAND !BUYCARD ===
         if (command === 'buycard') {
             const listingId = args[0];
             const buyerId = message.author.id;
@@ -768,6 +751,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [buyEmbed] });
         }
 
+        // === COMMAND !BUYBM ===
         if (command === 'buybm') {
             const listingId = args[0];
             const buyerId = message.author.id;
@@ -820,6 +804,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [bmBuyEmbed] });
         }
 
+        // === COMMAND KHUSUS ADMIN: !TESTBM ===
         if (command === 'testbm' && message.member.permissions.has('Administrator')) {
             const loadingBM = await message.reply("⏳ Menghubungi pasar gelap... Sedang menyelundupkan 6 barang baru dari MyAnimeList...");
             
@@ -877,6 +862,7 @@ client.on('messageCreate', async (message) => {
             return destChannel.send({ content: "@everyone 📑 **[SIMULASI] Lapak bursa rahasia Black Market berhasil dibuka secara paksa!**", embeds: [bmEmbed] });
         }
 
+        // === COMMAND !TOPCOLLECTOR ===
         if (command === 'topcollector') {
             if (!data.economy) data.economy = {};
 
@@ -927,6 +913,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [collectorEmbed] });
         }
 
+        // === COMMAND !COLLECTION ===
         if (command === 'collection') {
             const targetMember = message.mentions.members.first() || message.member;
             const targetId = targetMember.id;
@@ -963,6 +950,7 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [collectionEmbed] });
         }
 
+        // --- MANAJEMEN YOUTUBE NOTIF ---
         if (command === 'setchannelnotif' && message.member.permissions.has('Administrator')) {
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya!');
@@ -1034,6 +1022,7 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Channel ${id} dihapus dari list.`);
         }
 
+        // --- WELCOME & LEAVE CONFIG ---
         if (command === 'setwelcome' && message.member.permissions.has('Administrator')) {
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
@@ -1062,6 +1051,7 @@ client.on('messageCreate', async (message) => {
             return message.reply('✅ Simulasi event `guildMemberRemove` dijalankan.');
         }
 
+        // --- CONFIG UPDATES & BROADCAST ---
         if (command === 'setupupdate' && message.member.permissions.has('Administrator')) {
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel!');
@@ -1093,127 +1083,6 @@ client.on('messageCreate', async (message) => {
             });
             return message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);     
         }
-
-        // ========================================================
-        // 🎵 KELOMPOK COMMAND BARU: FITUR MUSIK HIGH PERFORMANCE 🎵
-        // ========================================================
-        if (command === 'play') {
-            const voiceChannel = message.member.voice.channel;
-            if (!voiceChannel) return message.reply('✖️ Masuk ke voice channel dulu kocak baru bisa setel lagu!');
-            
-            const pencarian = args.join(' ');
-            if (!pencarian) return message.reply('✖️ Lu mau muter keheningan? Ketik judul lagu atau link YouTube! Contoh: `!play unraveled`');
-
-            let queue = musicQueues.get(message.guild.id);
-            let songInfo = null;
-
-            const loadingMusik = await message.reply('🔍 Mencari takdir lagu di bursa YouTube...');
-
-            try {
-                // Cek apakah user input link langsung atau sekadar ketik text pencarian
-                if (play.yt_validate(pencarian) === 'video') {
-                    const videoData = await play.video_info(pencarian);
-                    songInfo = { title: videoData.video_details.title, url: videoData.video_details.url };
-                } else {
-                    const searchResults = await play.search(pencarian, { limit: 1 });
-                    if (searchResults.length === 0) return loadingMusik.edit('✖️ Judul lagu tersebut gak ketemu di YouTube!');
-                    songInfo = { title: searchResults[0].title, url: searchResults[0].url };
-                }
-            } catch (e) {
-                console.error(e);
-                return loadingMusik.edit('✖️ Server YouTube menolak permintaan request atau terkena pembatasan streaming.');
-            }
-
-            // Jika antrean server ini belum ada, bikin objek antrean baru
-            if (!queue) {
-                const queueContruct = {
-                    textChannel: message.channel,
-                    voiceChannel: voiceChannel,
-                    connection: null,
-                    player: null,
-                    songs: [],
-                };
-
-                musicQueues.set(message.guild.id, queueContruct);
-                queueContruct.songs.push(songInfo);
-
-                try {
-                    // Gabung ke voice channel secara native menggunakan @discordjs/voice
-                    const connection = joinVoiceChannel({
-                        channelId: voiceChannel.id,
-                        guildId: message.guild.id,
-                        adapterCreator: message.guild.voiceAdapterCreator,
-                    });
-
-                    const player = createAudioPlayer();
-                    queueContruct.connection = connection;
-                    queueContruct.player = player;
-
-                    connection.subscribe(player);
-
-                    // Event ketika lagu selesai dimainkan (Idle) -> otomatis mainkan antrean berikutnya
-                    player.on(AudioPlayerStatus.Idle, () => {
-                        queueContruct.songs.shift();
-                        putarLagu(message.guild.id, queueContruct.songs[0]);
-                    });
-
-                    player.on('error', error => console.error("Eror Pemutar Audio:", error));
-
-                    await loadingMusik.delete();
-                    putarLagu(message.guild.id, queueContruct.songs[0]);
-                } catch (err) {
-                    console.error(err);
-                    musicQueues.delete(message.guild.id);
-                    return message.channel.send('❌ Sistem bot gagal menjebol gerbang masuk Voice Channel!');
-                }
-            } else {
-                queue.songs.push(songInfo);
-                return loadingMusik.edit(`✅ **${songInfo.title}** sukses diselundupkan ke antrean nomor **#${queue.songs.length}**!`);
-            }
-        }
-
-        if (command === 'skip') {
-            const queue = musicQueues.get(message.guild.id);
-            if (!message.member.voice.channel) return message.reply('✖️ Masuk VC dulu baru lu berhak nge-skip lagu orang!');
-            if (!queue || queue.songs.length === 0) return message.reply('✖️ Lagi kagak ada lagu yang muter, apa yang mau di-skip?');
-            
-            queue.player.stop(); // Menghentikan player otomatis memicu status 'Idle' dan lanjut ke lagu berikutnya
-            return message.reply('⏭️ Lagu berhasil dipaksa skip oleh takdir!');
-        }
-
-        if (command === 'stop' || command === 'leave') {
-            const queue = musicQueues.get(message.guild.id);
-            if (!message.member.voice.channel) return message.reply('✖️ Masuk VC dulu baru bisa ngusir bot!');
-            if (!queue) return message.reply('✖️ Bot emang lagi nongkrong santai gak muter musik.');
-            
-            queue.songs = [];
-            queue.player.stop();
-            if (queue.connection) queue.connection.destroy();
-            musicQueues.delete(message.guild.id);
-            return message.reply('🛑 Pemutar musik dimatikan paksa, antrean dibakar, dan bot kabur dari VC.');
-        }
-
-        if (command === 'queue') {
-            const queue = musicQueues.get(message.guild.id);
-            if (!queue || queue.songs.length === 0) return message.reply('📭 Lembar antrean lagu saat ini masih kosong melompong.');
-
-            let qText = '';
-            queue.songs.forEach((song, i) => {
-                if (i === 0) {
-                    qText += `▶️ **[NOW PLAYING]** ${song.title}\n───────────────────\n`;
-                } else {
-                    qText += `**${i}.** ${song.title}\n`;
-                }
-            });
-
-            const qEmbed = new EmbedBuilder()
-                .setColor('#ffaa00')
-                .setTitle(`🎶 DAFTAR PUTAR AUDIO SERVER`)
-                .setDescription(qText || 'Tidak ada lagu antrean berikutnya.')
-                .setTimestamp();
-            return message.reply({ embeds: [qEmbed] });
-        }
-        // ========================================================
     }
 
     // === KELOMPOK OPERATIONS BACKGROUND: LOGIKA XP & MESSAGE COUNTER ===
@@ -1240,6 +1109,7 @@ client.on('messageCreate', async (message) => {
             return message.reply(`📊 **Status Mocals Bot**\nLevel: **${userXP.level}**\nXP: **${userXP.xp}**`);
         }
 
+        // === UPGRADE LOGIKA DECK: DUEL BIASA (ADU STRATEGI DECK) ===
         if (command === 'duel') {
             const lawan = message.mentions.members.first();
             if (!lawan) return message.reply('Tag dulu lawanmu!');
@@ -1256,6 +1126,7 @@ client.on('messageCreate', async (message) => {
                 return message.reply(`✖️ Gak bisa ditantang! <@${lawan.id}> belum menyusun deck aktifnya.`);
             }
 
+            // Jalankan simulasi tarung instan tanpa taruhan koin
             let powerPenantang = 0;
             deckPenantang.forEach(id => {
                 const k = data.economy[message.author.id].cards.find(c => c.id === id);
@@ -1355,6 +1226,7 @@ client.on('messageCreate', async (message) => {
             return message.reply('✅ Tanggal ultah disimpan!');
         }
 
+        // --- SISTEM EKONOMI ---
         if (command === 'money') {
             if (!data.economy) data.economy = {};
             const user = data.economy[message.author.id] || { money: 0 };
@@ -1402,6 +1274,7 @@ client.on('messageCreate', async (message) => {
             return;
         }
 
+        // === UPGRADE LOGIKA DECK: TARUHAN COIN !BIT ===
         if (command === 'bit') {
             const lawan = message.mentions.members.first();
             const jumlah = parseInt(args[1]);
@@ -1426,6 +1299,7 @@ client.on('messageCreate', async (message) => {
             }, 60000);
         }
 
+        // === UPGRADE LOGIKA DECK: CONFIRM TARUHAN (HITUNG POWER DECK) ===
         if (command === 'confirm') {
             const duel = activeDuels[message.author.id];
             if (!duel) return message.reply('Kamu tidak sedang ditantang!');
@@ -1438,12 +1312,14 @@ client.on('messageCreate', async (message) => {
 
             if (deckLawan.length === 0) return message.reply('✖️ Gak bisa mulai, deck aktif lu kosong! Atur dulu lewat `!setdeck`.');
 
+            // 1. Kalkulasi Deck Penantang
             let powerPenantang = 0;
             deckPenantang.forEach(id => {
                 const k = data.economy[idPenantang].cards.find(c => c.id === id);
                 if (k) powerPenantang += hitungPowerKartu(k.rarity);
             });
 
+            // 2. Kalkulasi Deck Lawan
             let powerLawan = 0;
             deckLawan.forEach(id => {
                 const k = data.economy[idLawan].cards.find(c => c.id === id);
