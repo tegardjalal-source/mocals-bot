@@ -241,9 +241,7 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
     const guildId = message.guild.id;
 
-    // ========================================================
     // 🔥 DETEKSI ANTI-SPAM, PURGE & AUTO-KICK (WARN VALID 5 MENIT)
-    // ========================================================
     if (!securityDisabledGuilds.has(guildId)) {
         if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
             const userId = message.author.id;
