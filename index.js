@@ -144,6 +144,7 @@ client.once('ready', async () => {
         process.exit(1);
     }
 });
+
 cron.schedule('0 0 * * *', async () => {
     console.log("🔄 Jam 00:00: Mengeksekusi rutinitas harian di semua server...");
     
@@ -438,7 +439,10 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        if (command === 'bmchannelset' && message.member.permissions.has('Administrator')) {
+        if (command === 'bmchannelset') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('✖️ Format salah! Tag channel tujuannya. Contoh: `!bmchannelset #black-market`');
 
@@ -449,7 +453,10 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Lapak rahasia dikunci! Info selundupan Black Market harian akan dikirim otomatis ke channel ${ch}.`);
         }
 
-        if (command === 'sethbdrole' && message.member.permissions.has('Administrator')) {
+        if (command === 'sethbdrole') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const role = message.mentions.roles.first();
             if (!role) return message.reply('✖️ Format salah! Tag role tujuannya. Contoh: `!sethbdrole @UlangTahun`');
             
@@ -460,7 +467,10 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Role hadiah ulang tahun berhasil diatur ke **${role.name}**.`);
         }
 
-        if (command === 'enablesecurity' && message.member.permissions.has('Administrator')) {
+        if (command === 'enablesecurity') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             if (!data.serverSettings) data.serverSettings = {};
             if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
             
@@ -470,7 +480,10 @@ client.on('messageCreate', async (message) => {
             return message.reply('✅ **Sistem Keamanan Aktif!** Fitur Anti-Spam, Auto-Purge, dan Auto-Kick sekarang berjalan penuh di server ini.');
         }
 
-        if (command === 'disablesecurity' && message.member.permissions.has('Administrator')) {
+        if (command === 'disablesecurity') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             if (!data.serverSettings) data.serverSettings = {};
             if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
             
@@ -796,7 +809,10 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [bmBuyEmbed] });
         }
 
-        if (command === 'testbm' && message.member.permissions.has('Administrator')) {
+        if (command === 'testbm') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const loadingBM = await message.reply("⏳ Menghubungi pasar gelap... Sedang menyelundupkan 6 barang baru dari MyAnimeList...");
             
             if (!data.blackMarketServers) data.blackMarketServers = {};
@@ -940,7 +956,10 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [collectionEmbed] });
         }
 
-        if (command === 'setchannelnotif' && message.member.permissions.has('Administrator')) {
+        if (command === 'setchannelnotif') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya!');
             if (!data.serverSettings) data.serverSettings = {};
@@ -975,7 +994,10 @@ client.on('messageCreate', async (message) => {
             return message.reply(`📺 **Daftar Channel Dipantau**:\n${list}`);
         }
 
-        if (command === 'testyt' && message.member.permissions.has('Administrator')) {
+        if (command === 'testyt') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
             const channels = data.ytChannels || [];
             const logChannelId = data.serverSettings?.[guildId]?.ytLogChannel;
@@ -1011,7 +1033,10 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Channel ${id} dihapus dari list.`);
         }
 
-        if (command === 'setwelcome' && message.member.permissions.has('Administrator')) {
+        if (command === 'setwelcome') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
             if (!data.serverSettings) data.serverSettings = {};
@@ -1020,7 +1045,10 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
         }
 
-        if (command === 'setleave' && message.member.permissions.has('Administrator')) {
+        if (command === 'setleave') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya! Contoh: !setleave #leave');
             if (!data.serverSettings) data.serverSettings = {};
@@ -1029,17 +1057,26 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
         }
         
-        if (command === 'testwelcome' && message.member.permissions.has('Administrator')) {
+        if (command === 'testwelcome') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             client.emit('guildMemberAdd', message.member);
             return message.reply('✅ Simulasi event `guildMemberAdd` dijalankan.');
         }
 
-        if (command === 'testleave' && message.member.permissions.has('Administrator')) {
+        if (command === 'testleave') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             client.emit('guildMemberRemove', message.member);
             return message.reply('✅ Simulasi event `guildMemberRemove` dijalankan.');
         }
 
-        if (command === 'setupupdate' && message.member.permissions.has('Administrator')) {
+        if (command === 'setupupdate') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel!');
             if (!data.serverSettings) data.serverSettings = {};
@@ -1047,12 +1084,18 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Log diatur ke ${ch}`);
         }
         
-        if (command === 'postupdate' && message.member.permissions.has('Administrator')) {
+        if (command === 'postupdate') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             sendUpdateLog(message.guild, args.join(' '));
             return message.reply('✅ Terkirim!');
         }
 
-        if (command === 'mocalschanbc' && message.member.permissions.has('Administrator')) {
+        if (command === 'mocalschanbc') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const targetChannel = message.mentions.channels.first();
             const broadcastMsg = message.content.slice(14).replace(/<#[0-9]+>/, '').trim();
 
@@ -1185,7 +1228,10 @@ client.on('messageCreate', async (message) => {
             });
         }
 
-        if (command === 'teshbd' && message.member.permissions.has('Administrator')) {
+        if (command === 'teshbd') {
+            if (!message.member.permissions.has('Administrator')) {
+                return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            }
             const hbdRoleId = data.serverSettings?.[guildId]?.hbdRoleId;
             if (!hbdRoleId) return message.reply('❌ Konfigurasi role HBD belum dipasang di server ini! Gunakan `!sethbdrole @role` terlebih dahulu.');
             
@@ -1221,7 +1267,6 @@ client.on('messageCreate', async (message) => {
             const duel = activeDuels[message.author.id];
             if (!duel) return message.reply('Kamu tidak sedang ditantang!');
             
-            // Mengembalikan taruhan escrow kepada penantang asal saat dibatalkan
             if (data.economy[duel.penantang]) {
                 data.economy[duel.penantang].money += duel.jumlah;
             }
@@ -1281,7 +1326,6 @@ client.on('messageCreate', async (message) => {
 
             if (activeDuels[lawan.id]) return message.reply('Lawan sedang ditantang orang lain, tunggu ya!');
 
-            // Amankan Uang Taruhan (Sistem Escrow / Jaminan) dari penantang agar tidak dipindahkan sebelum konfirmasi
             data.economy[message.author.id].money -= jumlah;
 
             activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
@@ -1289,7 +1333,6 @@ client.on('messageCreate', async (message) => {
             
             return setTimeout(() => {
                 if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
-                    // Pengembalian dana jaminan karena kedaluwarsa
                     if (data.economy[message.author.id]) {
                         data.economy[message.author.id].money += jumlah;
                     }
@@ -1306,15 +1349,12 @@ client.on('messageCreate', async (message) => {
             const idLawan = message.author.id; 
             const idPenantang = duel.penantang; 
 
-            // Pengecekan saldo lawan saat menekan confirm
             if ((data.economy[idLawan]?.money || 0) < duel.jumlah) {
-                // Kembalikan uang penantang karena dibatalkan
                 data.economy[idPenantang].money += duel.jumlah;
                 delete activeDuels[message.author.id];
                 return message.channel.send('✖️ Pertarungan dibatalkan karena saldo penantang/lawan tidak mencukupi saat laga dimulai.');
             }
 
-            // Potong saldo pihak lawan (saldo penantang sudah terpotong saat !bit)
             data.economy[idLawan].money -= duel.jumlah;
 
             const deckLawan = data.economy?.[idLawan]?.deck || [];
@@ -1335,7 +1375,6 @@ client.on('messageCreate', async (message) => {
             const menangId = powerPenantang > powerLawan ? idPenantang : idLawan;
             const kalahId = menangId === idLawan ? idPenantang : idLawan;
 
-            // Total hadiah judi adalah gabungan dua taruhan (jumlah * 2)
             data.economy[menangId].money += (duel.jumlah * 2);
 
             let battleText = `🏆 **JUDI BIT DECK KARTU SELESAI!** 🏆\n\n`;
