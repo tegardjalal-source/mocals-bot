@@ -96,7 +96,6 @@ async function checkYouTubeLiveStreams() {
 
 async function updateBotStatus() {
     try {
-        // PERBAIKAN 1: Mengambil data member via cache lokal, menghindari API Rate Limit saat dipanggil berkala
         const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
         client.user.setActivity(`🍀 Memantau ${totalMembers} member`, { type: ActivityType.Custom });
     } catch (e) { console.error('Gagal update status:', e); }
@@ -113,7 +112,6 @@ async function sendUpdateLog(guild, content) {
     }
 }
 
-// PERBAIKAN 2: Mengubah event 'ready' menjadi 'clientReady' agar sesuai dengan discord.js v15
 client.once('clientReady', async () => {
     try {
         console.log(`${client.user.tag} sudah siap beraksi!`);
@@ -133,7 +131,6 @@ client.once('clientReady', async () => {
         await checkYouTubeLiveStreams();
         setInterval(checkYouTubeLiveStreams, 60000);
         
-        // PERBAIKAN 3: Menghilangkan paksaan fetch member massal yang memicu Gateway Rate Limit Error
         console.log("Data member berhasil dimuat ke cache.");
 
         await updateBotStatus();
@@ -235,12 +232,17 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
+// Cache Map global untuk melacak batasan durasi warn (5 menit)
+if (!global.userWarnsCache) {
+    global.userWarnsCache = new Map();
+}
+
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
     const guildId = message.guild.id;
 
     // ========================================================
-    // 🔥 DETEKSI ANTI-SPAM, PURGE & AUTO-KICK
+    // 🔥 DETEKSI ANTI-SPAM, PURGE & AUTO-KICK (WARN VALID 5 MENIT)
     // ========================================================
     if (!securityDisabledGuilds.has(guildId)) {
         if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
@@ -269,19 +271,40 @@ client.on('messageCreate', async (message) => {
                         await message.channel.bulkDelete(messagesToDelete, true).catch(() => null);
                     }
 
-                    if (message.member && message.member.kickable) {
-                        await message.member.kick('Spam berlebihan terdeteksi otomatis oleh sistem keamanan bot.');
+                    const warnExpiryTime = global.userWarnsCache.get(userId);
+                    
+                    // Jika belum pernah mendapatkan warn, ATAU waktu warn lamanya sudah hangus (lewat dari 5 menit)
+                    if (!warnExpiryTime || now > warnExpiryTime) {
                         
-                        const antiSpamEmbed = new EmbedBuilder()
-                            .setColor('#ff0000')
-                            .setTitle('🚨 TINDAKAN AUTO-MODERASI')
-                            .setDescription(`**${message.author.tag}** telah ditendang dari server karena melakukan spamming secara berlebihan. Seluruh pesan terduga spam telah dibersihkan secara massal!`)
-                            .setTimestamp();
-                        
-                        message.channel.send({ embeds: [antiSpamEmbed] });
-                    }
+                        const limaMenit = 5 * 60 * 1000; 
+                        global.userWarnsCache.set(userId, now + limaMenit); 
 
-                    messageCounts.delete(userId); 
+                        const warnEmbed = new EmbedBuilder()
+                            .setColor('#ffaa00')
+                            .setTitle('⚠️ PERINGATAN ANTI-SPAM')
+                            .setDescription(`Halo <@${userId}>, kamu terdeteksi mengetik terlalu cepat! Sesi pesanmu telah dibersihkan.\n\n**Peringatan ini hanya berlaku selama 5 menit**. Jangan diulangi ya, kalau kamu tetap nekat spam dalam waktu dekat, kamu akan **ditendang (kick)** dari server! 🤫`)
+                            .setTimestamp();
+
+                        message.channel.send({ content: `<@${userId}>`, embeds: [warnEmbed] });
+                        messageCounts.delete(userId); 
+
+                    } else {
+                        // Jika nekat melanggar lagi di dalam sekat waktu 5 menit pengawasan
+                        if (message.member && message.member.kickable) {
+                            await message.member.kick('Spam berlebihan di dalam masa pengawasan 5 menit.');
+                            
+                            const antiSpamEmbed = new EmbedBuilder()
+                                .setColor('#ff0000')
+                                .setTitle('🚨 TINDAKAN AUTO-MODERASI')
+                                .setDescription(`**${message.author.tag}** telah ditendang dari server karena mengabaikan peringatan bot dan tetap melakukan spamming!`)
+                                .setTimestamp();
+                            
+                            message.channel.send({ embeds: [antiSpamEmbed] });
+                        }
+
+                        messageCounts.delete(userId); 
+                        global.userWarnsCache.delete(userId);
+                    }
                     return; 
                 } catch (err) {
                     console.error('Gagal memproses eksekusi sistem anti-spam:', err);
@@ -374,7 +397,6 @@ client.on('messageCreate', async (message) => {
         }
 
         if (command === 'gachainfo') {
-            // PERBAIKAN 4: Menghapus karakter typo '\通' yang merusak format teks embed
             const infoEmbed = new EmbedBuilder()
                 .setColor(0xFF69B4)
                 .setTitle('🔮 Panduan Gacha Multi-Luck & Bursa Pasar')
