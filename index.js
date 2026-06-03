@@ -43,6 +43,9 @@ const GUILD_ID = '746583847734345741';
 const activeDuels = {};
 const notifiedVideosCache = new Set();
 
+// CACHE UNTUK MEREKAM TIMESTAMPS PESAN PENGGUNA (ANTI-SPAM)
+const messageCounts = new Map();
+
 const youtube = google.youtube({
     version: 'v3',
     auth: process.env.YOUTUBE_API_KEY
@@ -210,7 +213,63 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
+    if (message.author.bot || !message.guild) return;
+
+    // ========================================================
+    // 🔥 FITUR INTEGRASI: DETEKSI ANTI-SPAM, PURGE & AUTO-KICK
+    // ========================================================
+    // Bypass proteksi jika pengirim adalah Administrator atau memiliki izin mengelola pesan
+    if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
+        const userId = message.author.id;
+        const now = Date.now();
+        const LIMIT = 5; // Maksimal pesan dalam kurun waktu tertentu
+        const TIME_WINDOW = 3000; // Jendela waktu (3 detik)
+
+        if (!messageCounts.has(userId)) {
+            messageCounts.set(userId, []);
+        }
+
+        const timestamps = messageCounts.get(userId);
+        timestamps.push(now);
+
+        // Filter membuang log pesan yang di luar jendela waktu 3 detik
+        const recentMessages = timestamps.filter(ts => now - ts < TIME_WINDOW);
+        messageCounts.set(userId, recentMessages);
+
+        // Jika terdeteksi melanggar batas (Spamming)
+        if (recentMessages.length > LIMIT) {
+            try {
+                // 1. Ambil 20 pesan terakhir di channel tersebut lalu saring milik pelaku spam
+                const fetchedMessages = await message.channel.messages.fetch({ limit: 20 });
+                const messagesToDelete = fetchedMessages.filter(m => m.author.id === userId);
+
+                // 2. Hapus semua pesan terindikasi spam (Auto-Purge)
+                if (messagesToDelete.size > 0) {
+                    await message.channel.bulkDelete(messagesToDelete, true);
+                }
+
+                // 3. Eksekusi Kick dari Server (Auto-Kick)
+                if (message.member && message.member.kickable) {
+                    await message.member.kick('Spam berlebihan terdeteksi otomatis oleh sistem keamanan bot.');
+                    
+                    // Kirim log notifikasi pemberitahuan ke channel chat
+                    const antiSpamEmbed = new EmbedBuilder()
+                        .setColor('#ff0000')
+                        .setTitle('🚨 TINDAKAN AUTO-MODERASI')
+                        .setDescription(`**${message.author.tag}** telah ditendang dari server karena melakukan spamming secara berlebihan. Seluruh pesan terduga spam telah dibersihkan secara massal!`)
+                        .setTimestamp();
+                    
+                    message.channel.send({ embeds: [antiSpamEmbed] });
+                }
+
+                messageCounts.delete(userId); // Bersihkan cache memori pengguna
+                return; // ⛔ STOP EKSEKUSI! Menghentikan bot membaca perintah / menambah XP di bawahnya.
+            } catch (err) {
+                console.error('Gagal memproses eksekusi sistem anti-spam:', err);
+            }
+        }
+    }
+    // ========================================================
 
     // === PENGECKAN MENTION BOT ===
     if (message.mentions.has(client.user.id) && !message.content.startsWith('!')) {
@@ -252,7 +311,7 @@ client.on('messageCreate', async (message) => {
                     { name: '⚔️ Duel Formasi Deck & Taruhan', value: '`!setdeck [ID_MAL]` (Pasang/copot kartu), `!deck` (Cek deck), `!duel @user` (Latihan), `!bit @user [jumlah]` (Taruhan koin), `!confirm`, `!reject`', inline: false },
                     { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`', inline: false },
                     { name: '🔮 Gacha Multi-Luck & Album Kartu', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!gachainfo`, `!collection`, `!charinfo`, `!topcollector`', inline: false },
-                    { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard`, `!marketlist`, `!buycard`, `!buybm`', inline: false },
+                    { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Etalase toko.\n`!buycard [Kode]`, `!buybm [Kode]`', inline: false },
                     { name: '📺 Pemantau YouTube Live', value: '`!addchannel`, `!removechannel`, `!listchannels`', inline: false }
                 );
 
@@ -413,7 +472,7 @@ client.on('messageCreate', async (message) => {
                 
                 const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
                 if (sudahPunya) {
-                    sudahPunya.count += 1; // ✅ FIX: Penghapusan typo assignment variable crash kemarin
+                    sudahPunya.count += 1;
                 } else {
                     userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
                 }
