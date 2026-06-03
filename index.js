@@ -138,7 +138,6 @@ client.once('ready', async () => {
         await updateBotStatus();
         setInterval(updateBotStatus, 60000);
 
-        // Jangan save per 30 detik (bisa terkena rate limit JSONBin), disarankan per 5-10 menit. Diubah ke 5 menit (300000ms).
         setInterval(async () => {
             await saveData(globalDbCache);
         }, 300000);
@@ -315,8 +314,6 @@ client.on('messageCreate', async (message) => {
         command = args.shift().toLowerCase();
     }
 
-    let data = globalDbCache; 
-
     if (isCommand) {
         if (command === 'help') {
             const helpEmbed = new EmbedBuilder()
@@ -382,7 +379,7 @@ client.on('messageCreate', async (message) => {
                 .setDescription('Hai! Ini adalah tarif harga serta jaminan kasta gacha keberuntungan Mocals Chan:')
                 .addFields(
                     { name: '🎲 Pilihan Kategori Gacha', value: 
-                        `🔴 \`!gacha\` - Tarif: **$500** | Hasil: Acak Bebas (\`C\`, \`R\`, \`SR\`, \`SSR\`)\n` +
+                        `🔴 \`!gacha\` - Tarif: **$500** | Hasil: Acak Bebas (\`C\`, \`R\通, \`SR\`, \`SSR\`)\n` +
                         `🟢 \`!gachaluck\` - Tarif: **$3.500** | Jaminan: Minimal Rare (**\`R\`**, \`SR\`, \`SSR\`)\n` +
                         `🔵 \`!gachasuperluck\` - Tarif: **$15.000** | Jaminan: Minimal Super Rare (**\`SR\`**, \`SSR\`)\n` +
                         `🔥 \`!gachamegaluck\` - Tarif: **$75.000** | Jaminan: **Wajib Kasta Tertinggi (\`SSR\`)!**`, inline: false },
@@ -451,10 +448,10 @@ client.on('messageCreate', async (message) => {
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('✖️ Format salah! Tag channel tujuannya. Contoh: `!bmchannelset #black-market`');
 
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
             
-            data.serverSettings[guildId].bmChannelId = ch.id;
+            globalDbCache.serverSettings[guildId].bmChannelId = ch.id;
             return message.reply(`✅ Lapak rahasia dikunci! Info selundupan Black Market harian akan dikirim otomatis ke channel ${ch}.`);
         }
 
@@ -464,22 +461,27 @@ client.on('messageCreate', async (message) => {
             }
             const role = message.mentions.roles.first();
             if (!role) return message.reply('✖️ Format salah! Tag role tujuannya. Contoh: `!sethbdrole @UlangTahun`');
-            
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
-            
-            data.serverSettings[guildId].hbdRoleId = role.id;
-            return message.reply(`✅ Role hadiah ulang tahun berhasil diatur ke **${role.name}**.`);
-        }
+
+            try {
+                if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+                if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+
+                globalDbCache.serverSettings[guildId].hbdRoleId = role.id;
+                return message.reply(`✅ Role hadiah ulang tahun berhasil diatur ke **${role.name}**.`);
+            } catch (err) {
+                console.error("Eror saat menjalankan perintah sethbdrole:", err);
+                return message.reply("✖️ Terjadi kesalahan internal saat mencoba menyimpan konfigurasi role.");
+            }
+        } 
 
         if (command === 'enablesecurity') {
             if (!message.member.permissions.has('Administrator')) {
                 return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
             }
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
             
-            data.serverSettings[guildId].securityDisabled = false;
+            globalDbCache.serverSettings[guildId].securityDisabled = false;
             securityDisabledGuilds.delete(guildId); 
             
             return message.reply('✅ **Sistem Keamanan Aktif!** Fitur Anti-Spam, Auto-Purge, dan Auto-Kick sekarang berjalan penuh di server ini.');
@@ -489,10 +491,10 @@ client.on('messageCreate', async (message) => {
             if (!message.member.permissions.has('Administrator')) {
                 return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
             }
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
             
-            data.serverSettings[guildId].securityDisabled = true;
+            globalDbCache.serverSettings[guildId].securityDisabled = true;
             securityDisabledGuilds.add(guildId); 
             
             return message.reply('⚠️ **Sistem Keamanan Dimatikan!** Fitur Anti-Spam dan Auto-Kick telah dinonaktifkan. Gunakan `!enablesecurity` untuk menghidupkannya kembali.');
@@ -509,9 +511,9 @@ client.on('messageCreate', async (message) => {
             const config = gachaTiers[command];
             const userId = message.author.id;
 
-            if (!data.economy) data.economy = {};
-            if (!data.economy[userId]) data.economy[userId] = { money: 0, lastWork: 0, cards: [], deck: [] };
-            const userWallet = data.economy[userId];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            if (!globalDbCache.economy[userId]) globalDbCache.economy[userId] = { money: 0, lastWork: 0, cards: [], deck: [] };
+            const userWallet = globalDbCache.economy[userId];
 
             if (userWallet.money < config.price) {
                 return message.reply(`✖️ Dompet lu kering! Opsy gacha **!${command}** butuh dana hoki sebesar **$${config.price.toLocaleString('id-ID')}**, tabungan lu cuma ada **$${userWallet.money.toLocaleString('id-ID')}**.`);
@@ -567,9 +569,9 @@ client.on('messageCreate', async (message) => {
 
             if (!cardId) return message.reply('✖️ Format salah! Gunakan: `!setdeck [ID_MAL]`\nContoh: `!setdeck 21`');
 
-            if (!data.economy) data.economy = {};
-            if (!data.economy[userId]) data.economy[userId] = { money: 0, cards: [], deck: [] };
-            const userWallet = data.economy[userId];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            if (!globalDbCache.economy[userId]) globalDbCache.economy[userId] = { money: 0, cards: [], deck: [] };
+            const userWallet = globalDbCache.economy[userId];
             if (!userWallet.deck) userWallet.deck = [];
 
             const punyaKartu = userWallet.cards.find(c => c.id === cardId);
@@ -590,7 +592,7 @@ client.on('messageCreate', async (message) => {
 
         if (command === 'deck') {
             const userId = message.author.id;
-            const userWallet = data.economy?.[userId];
+            const userWallet = globalDbCache.economy?.[userId];
             const activeDeck = userWallet?.deck || [];
 
             if (activeDeck.length === 0) {
@@ -626,9 +628,9 @@ client.on('messageCreate', async (message) => {
                 return message.reply('✖️ Format salah! Gunakan: `!sellcard [ID_MAL] [Harga]`\nContoh: `!sellcard 31254 1500`');
             }
 
-            if (!data.economy) data.economy = {};
-            if (!data.economy[userId]) data.economy[userId] = { money: 0, cards: [] };
-            const userWallet = data.economy[userId];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            if (!globalDbCache.economy[userId]) globalDbCache.economy[userId] = { money: 0, cards: [] };
+            const userWallet = globalDbCache.economy[userId];
 
             if (!userWallet.cards || userWallet.cards.length === 0) {
                 return message.reply('✖️ Lu belum punya kartu karakter sama sekali untuk dijual.');
@@ -647,10 +649,10 @@ client.on('messageCreate', async (message) => {
                 userWallet.cards.splice(indexKartu, 1);
             }
 
-            if (!data.market) data.market = [];
+            if (!globalDbCache.market) globalDbCache.market = [];
             const listingId = Date.now().toString().slice(-6); 
 
-            data.market.push({
+            globalDbCache.market.push({
                 listingId: listingId,
                 sellerId: userId,
                 sellerName: message.author.username,
@@ -676,12 +678,12 @@ client.on('messageCreate', async (message) => {
         }
 
         if (command === 'marketlist') {
-            if (!data.market || data.market.length === 0) {
+            if (!globalDbCache.market || globalDbCache.market.length === 0) {
                 return message.reply('📭 Bursa pasar kartu saat ini lagi kosong melompong. Belum ada yang jualan nih!');
             }
 
             let marketText = '';
-            data.market.forEach((item, index) => {
+            globalDbCache.market.forEach((item, index) => {
                 marketText += `**${index + 1}. ${item.name}** [${item.rarity}]\n`;
                 marketText += `┣ 🆔 ID MAL: \`${item.id}\`\n`;
                 marketText += `┣ 👤 Penjual: <@${item.sellerId}>\n`;
@@ -711,24 +713,24 @@ client.on('messageCreate', async (message) => {
                 return message.reply('✖️ Masukkan kode listing toko! Format: `!buycard [Kode_Listing]`');
             }
 
-            if (!data.market || data.market.length === 0) {
+            if (!globalDbCache.market || globalDbCache.market.length === 0) {
                 return message.reply('✖️ Bursa pasar kartu saat ini lagi kosong.');
             }
 
-            const marketIndex = data.market.findIndex(item => item.listingId === listingId);
+            const marketIndex = globalDbCache.market.findIndex(item => item.listingId === listingId);
             if (marketIndex === -1) {
                 return message.reply('✖️ Kode listing toko tidak ditemukan atau kartu sudah laku terjual.');
             }
 
-            const itemGacha = data.market[marketIndex];
+            const itemGacha = globalDbCache.market[marketIndex];
 
             if (itemGacha.sellerId === buyerId) {
                 return message.reply('✖️ Lu gak bisa beli kartu bikinan lu sendiri kocak!');
             }
 
-            if (!data.economy) data.economy = {};
-            if (!data.economy[buyerId]) data.economy[buyerId] = { money: 0, cards: [] };
-            const buyerWallet = data.economy[buyerId];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            if (!globalDbCache.economy[buyerId]) globalDbCache.economy[buyerId] = { money: 0, cards: [] };
+            const buyerWallet = globalDbCache.economy[buyerId];
 
             if (buyerWallet.money < itemGacha.price) {
                 return message.reply(`✖️ Duit lu kurang! Harga kartu ini **$${itemGacha.price}**, tabungan lu cuma **$${buyerWallet.money}**.`);
@@ -736,8 +738,8 @@ client.on('messageCreate', async (message) => {
 
             buyerWallet.money -= itemGacha.price;
 
-            if (!data.economy[itemGacha.sellerId]) data.economy[itemGacha.sellerId] = { money: 0, cards: [] };
-            data.economy[itemGacha.sellerId].money += itemGacha.price;
+            if (!globalDbCache.economy[itemGacha.sellerId]) globalDbCache.economy[itemGacha.sellerId] = { money: 0, cards: [] };
+            globalDbCache.economy[itemGacha.sellerId].money += itemGacha.price;
 
             if (!buyerWallet.cards) buyerWallet.cards = [];
             const sudahPunya = buyerWallet.cards.find(c => c.id === itemGacha.id);
@@ -747,7 +749,7 @@ client.on('messageCreate', async (message) => {
                 buyerWallet.cards.push({ id: itemGacha.id, name: itemGacha.name, rarity: itemGacha.rarity, count: 1 });
             }
 
-            data.market.splice(marketIndex, 1);
+            globalDbCache.market.splice(marketIndex, 1);
 
             const buyEmbed = new EmbedBuilder()
                 .setColor('#00ff55')
@@ -770,20 +772,20 @@ client.on('messageCreate', async (message) => {
                 return message.reply('✖️ Masukkan kode listing pasar gelap! Format: `!buybm [Kode_Listing]`');
             }
 
-            if (!data.blackMarketServers || !data.blackMarketServers[guildId] || data.blackMarketServers[guildId].length === 0) {
+            if (!globalDbCache.blackMarketServers || !globalDbCache.blackMarketServers[guildId] || globalDbCache.blackMarketServers[guildId].length === 0) {
                 return message.reply('✖️ Penyelundup sedang bersembunyi. Black Market kosong saat ini.');
             }
 
-            const bmIndex = data.blackMarketServers[guildId].findIndex(item => item.listingId === listingId);
+            const bmIndex = globalDbCache.blackMarketServers[guildId].findIndex(item => item.listingId === listingId);
             if (bmIndex === -1) {
                 return message.reply('✖️ Kode listing pasar gelap salah atau kartu tersebut sudah diborong orang lain!');
             }
 
-            const itemBM = data.blackMarketServers[guildId][bmIndex];
+            const itemBM = globalDbCache.blackMarketServers[guildId][bmIndex];
 
-            if (!data.economy) data.economy = {};
-            if (!data.economy[buyerId]) data.economy[buyerId] = { money: 0, cards: [] };
-            const buyerWallet = data.economy[buyerId];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            if (!globalDbCache.economy[buyerId]) globalDbCache.economy[buyerId] = { money: 0, cards: [] };
+            const buyerWallet = globalDbCache.economy[buyerId];
 
             if (buyerWallet.money < itemBM.price) {
                 return message.reply(`✖️ Duit haram lu kurang! Harganya **$${itemBM.price}**, dompet lu cuma ada **$${buyerWallet.money}**.`);
@@ -799,7 +801,7 @@ client.on('messageCreate', async (message) => {
                 buyerWallet.cards.push({ id: itemBM.id, name: itemBM.name, rarity: itemBM.rarity, count: 1 });
             }
 
-            data.blackMarketServers[guildId].splice(bmIndex, 1);
+            globalDbCache.blackMarketServers[guildId].splice(bmIndex, 1);
 
             const bmBuyEmbed = new EmbedBuilder()
                 .setColor('#1a1a1a')
@@ -820,13 +822,13 @@ client.on('messageCreate', async (message) => {
             }
             const loadingBM = await message.reply("⏳ Menghubungi pasar gelap... Sedang menyelundupkan 6 barang baru dari MyAnimeList...");
             
-            if (!data.blackMarketServers) data.blackMarketServers = {};
-            data.blackMarketServers[guildId] = [];
+            if (!globalDbCache.blackMarketServers) globalDbCache.blackMarketServers = {};
+            globalDbCache.blackMarketServers[guildId] = [];
             for (let i = 0; i < 5; i++) {
                 const kartu = await jalankanGacha('biasa'); 
                 if (kartu && kartu.sukses) {
                     const hargaBM = Math.floor(Math.random() * 900) + 300;
-                    data.blackMarketServers[guildId].push({
+                    globalDbCache.blackMarketServers[guildId].push({
                         listingId: `BM-${Math.floor(1000 + Math.random() * 9000)}`,
                         id: kartu.id,
                         name: kartu.name,
@@ -841,7 +843,7 @@ client.on('messageCreate', async (message) => {
             const kartuSpesial = await jalankanGacha('megaluck'); 
             if (kartuSpesial && kartuSpesial.sukses) {
                 const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500;
-                data.blackMarketServers[guildId].push({
+                globalDbCache.blackMarketServers[guildId].push({
                     listingId: `BM-PREM`,
                     id: kartuSpesial.id,
                     name: kartuSpesial.name,
@@ -851,11 +853,11 @@ client.on('messageCreate', async (message) => {
                 });
             }
 
-            const targetChannelId = data.serverSettings?.[guildId]?.bmChannelId;
+            const targetChannelId = globalDbCache.serverSettings?.[guildId]?.bmChannelId;
             const destChannel = targetChannelId ? (message.guild.channels.cache.get(targetChannelId) || await message.guild.channels.fetch(targetChannelId).catch(() => message.channel)) : message.channel;
 
             let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (TEST MODE)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
-            data.blackMarketServers[guildId].forEach((item) => {
+            globalDbCache.blackMarketServers[guildId].forEach((item) => {
                 if (item.isPremium) {
                     bmText += `🔥 **[PREMIUM ITEM] ${item.name}** [${item.rarity}]\n`;
                 } else {
@@ -876,11 +878,11 @@ client.on('messageCreate', async (message) => {
         }
 
         if (command === 'topcollector') {
-            if (!data.economy) data.economy = {};
+            if (!globalDbCache.economy) globalDbCache.economy = {};
 
             const rarityOrder = { 'SSR': 1, 'SR': 2, 'R': 3, 'C': 4 };
 
-            const listCollector = Object.entries(data.economy)
+            const listCollector = Object.entries(globalDbCache.economy)
                 .map(([id, profile]) => {
                     let totalKartu = 0;
                     let top5Cards = [];
@@ -929,8 +931,8 @@ client.on('messageCreate', async (message) => {
             const targetMember = message.mentions.members.first() || message.member;
             const targetId = targetMember.id;
 
-            if (!data.economy) data.economy = {};
-            const targetWallet = data.economy[targetId];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            const targetWallet = globalDbCache.economy[targetId];
 
             if (!targetWallet || !targetWallet.cards || targetWallet.cards.length === 0) {
                 return message.reply(`📭 ${targetMember.user.username} belum memiliki koleksi kartu karakter anime sama sekali.`);
@@ -967,25 +969,25 @@ client.on('messageCreate', async (message) => {
             }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya!');
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
             
-            data.serverSettings[guildId].ytLogChannel = ch.id;
+            globalDbCache.serverSettings[guildId].ytLogChannel = ch.id;
             return message.reply(`✅ Channel notification live diatur ke ${ch}`);
         }
 
         if (command === 'addchannel') {
             const id = args[0];
             if (!id) return message.reply('Masukkan ID channel!');
-            if (!data.ytChannels) data.ytChannels = [];
-            if (data.ytChannels.includes(id)) return message.reply('Channel sudah ada di list!');
+            if (!globalDbCache.ytChannels) globalDbCache.ytChannels = [];
+            if (globalDbCache.ytChannels.includes(id)) return message.reply('Channel sudah ada di list!');
             
-            data.ytChannels.push(id);
+            globalDbCache.ytChannels.push(id);
             return message.reply(`✅ Channel ${id} berhasil ditambahkan!`);
         }
 
         if (command === 'listchannels') {
-            const channels = data.ytChannels || [];
+            const channels = globalDbCache.ytChannels || [];
             if (channels.length === 0) return message.reply('Belum ada channel.');
 
             const channelDetails = await Promise.all(channels.map(async (id) => {
@@ -1004,8 +1006,8 @@ client.on('messageCreate', async (message) => {
                 return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
             }
             message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
-            const channels = data.ytChannels || [];
-            const logChannelId = data.serverSettings?.[guildId]?.ytLogChannel;
+            const channels = globalDbCache.ytChannels || [];
+            const logChannelId = globalDbCache.serverSettings?.[guildId]?.ytLogChannel;
             const targetChannel = logChannelId ? (client.channels.cache.get(logChannelId) || await client.channels.fetch(logChannelId).catch(() => null)) : null;
 
             if (!logChannelId || !targetChannel) {
@@ -1033,8 +1035,8 @@ client.on('messageCreate', async (message) => {
 
         if (command === 'removechannel') {
             const id = args[0];
-            if (!data.ytChannels) return message.reply('List channel kosong!');
-            data.ytChannels = data.ytChannels.filter(c => c !== id);
+            if (!globalDbCache.ytChannels) return message.reply('List channel kosong!');
+            globalDbCache.ytChannels = globalDbCache.ytChannels.filter(c => c !== id);
             return message.reply(`✅ Channel ${id} dihapus dari list.`);
         }
 
@@ -1044,9 +1046,9 @@ client.on('messageCreate', async (message) => {
             }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya! Contoh: !setwelcome #welcome');
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
-            data.serverSettings[guildId].welcomeId = ch.id;
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+            globalDbCache.serverSettings[guildId].welcomeId = ch.id;
             return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
         }
 
@@ -1056,9 +1058,9 @@ client.on('messageCreate', async (message) => {
             }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel-nya! Contoh: !setleave #leave');
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
-            data.serverSettings[guildId].leaveId = ch.id;
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+            globalDbCache.serverSettings[guildId].leaveId = ch.id;
             return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
         }
         
@@ -1084,9 +1086,9 @@ client.on('messageCreate', async (message) => {
             }
             const ch = message.mentions.channels.first();
             if (!ch) return message.reply('Tag channel!');
-            if (!data.serverSettings) data.serverSettings = {};
-            if (!data.serverSettings[guildId]) data.serverSettings[guildId] = {};
-            data.serverSettings[guildId].logChannelId = ch.id;
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+            globalDbCache.serverSettings[guildId].logChannelId = ch.id;
             return message.reply(`✅ Log diatur ke ${ch}`);
         }
         
@@ -1121,16 +1123,16 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    if (!data.messages) data.messages = {};
-    data.messages[message.author.id] = (data.messages[message.author.id] || 0) + 1;
-    if (!data.xp) data.xp = {};
-    if (!data.xp[message.author.id]) data.xp[message.author.id] = { xp: 0, level: 1 };
-    data.xp[message.author.id].xp += Math.floor(Math.random() * 6) + 5;
-    let neededXP = data.xp[message.author.id].level * 100;
-    if (data.xp[message.author.id].xp >= neededXP) {
-        data.xp[message.author.id].level += 1;
-        data.xp[message.author.id].xp = 0;
-        message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${data.xp[message.author.id].level}**! ✨`);
+    if (!globalDbCache.messages) globalDbCache.messages = {};
+    globalDbCache.messages[message.author.id] = (globalDbCache.messages[message.author.id] || 0) + 1;
+    if (!globalDbCache.xp) globalDbCache.xp = {};
+    if (!globalDbCache.xp[message.author.id]) globalDbCache.xp[message.author.id] = { xp: 0, level: 1 };
+    globalDbCache.xp[message.author.id].xp += Math.floor(Math.random() * 6) + 5;
+    let neededXP = globalDbCache.xp[message.author.id].level * 100;
+    if (globalDbCache.xp[message.author.id].xp >= neededXP) {
+        globalDbCache.xp[message.author.id].level += 1;
+        globalDbCache.xp[message.author.id].xp = 0;
+        message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${globalDbCache.xp[message.author.id].level}**! ✨`);
     }
 
     if (isCommand) {
@@ -1139,7 +1141,7 @@ client.on('messageCreate', async (message) => {
         if (command === 'gabutnih') return message.reply('SAMA, AKU JUGA GABUT😠😠😠😠');
         
         if (command === 'rank') {
-            const userXP = data.xp[message.author.id] || { xp: 0, level: 1 };
+            const userXP = globalDbCache.xp[message.author.id] || { xp: 0, level: 1 };
             return message.reply(`📊 **Status Mocals Bot**\nLevel: **${userXP.level}**\nXP: **${userXP.xp}**`);
         }
 
@@ -1149,25 +1151,25 @@ client.on('messageCreate', async (message) => {
             if (lawan.user.bot) return message.reply('Bot tidak bisa diajak duel! 🤖');
             if (lawan.id === message.author.id) return message.reply('Masa duel sama diri sendiri? 😅');
 
-            const deckPenantang = data.economy?.[message.author.id]?.deck || [];
+            const deckPenantang = globalDbCache.economy?.[message.author.id]?.deck || [];
             if (deckPenantang.length === 0) {
                 return message.reply('✖️ Lu belum nyusun deck tempur lu! Atur dulu waifu andalan lu pake \`!setdeck [ID]\`.');
             }
 
-            const deckLawan = data.economy?.[lawan.id]?.deck || [];
+            const deckLawan = globalDbCache.economy?.[lawan.id]?.deck || [];
             if (deckLawan.length === 0) {
                 return message.reply(`✖️ Gak bisa ditantang! <@${lawan.id}> belum menyusun deck aktifnya.`);
             }
 
             let powerPenantang = 0;
             deckPenantang.forEach(id => {
-                const k = data.economy[message.author.id].cards.find(c => c.id === id);
+                const k = globalDbCache.economy[message.author.id].cards.find(c => c.id === id);
                 if (k) powerPenantang += hitungPowerKartu(k.rarity);
             });
 
             let powerLawan = 0;
             deckLawan.forEach(id => {
-                const k = data.economy[lawan.id].cards.find(c => c.id === id);
+                const k = globalDbCache.economy[lawan.id].cards.find(c => c.id === id);
                 if (k) powerLawan += hitungPowerKartu(k.rarity);
             });
 
@@ -1212,7 +1214,7 @@ client.on('messageCreate', async (message) => {
                     .addFields(
                         { name: 'ID', value: `\`${member.id}\``, inline: true },
                         { name: 'Bergabung di Server', value: `${joinedYears} years ago`, inline: true },
-                        { name: 'Total Pesan', value: `\`${data.messages?.[member.id] || 0}\``, inline: true },
+                        { name: 'Total Pesan', value: `\`${globalDbCache.messages?.[member.id] || 0}\``, inline: true },
                         { name: 'Roles', value: roles }
                     )
                 ]
@@ -1238,7 +1240,7 @@ client.on('messageCreate', async (message) => {
             if (!message.member.permissions.has('Administrator')) {
                 return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
             }
-            const hbdRoleId = data.serverSettings?.[guildId]?.hbdRoleId;
+            const hbdRoleId = globalDbCache.serverSettings?.[guildId]?.hbdRoleId;
             if (!hbdRoleId) return message.reply('❌ Konfigurasi role HBD belum dipasang di server ini! Gunakan `!sethbdrole @role` terlebih dahulu.');
             
             if (!message.member.roles.cache.has(hbdRoleId)) {
@@ -1258,14 +1260,14 @@ client.on('messageCreate', async (message) => {
             if (!tgl || !dateRegex.test(tgl)) {
                 return message.reply('❌ Format salah! Gunakan format \`DD-MM\`. Contoh: \`!sethbd 10-05\`');
             }
-            if (!data.hbd) data.hbd = {};
-            data.hbd[message.author.id] = tgl;
+            if (!globalDbCache.hbd) globalDbCache.hbd = {};
+            globalDbCache.hbd[message.author.id] = tgl;
             return message.reply('✅ Tanggal ultah disimpan!');
         }
 
         if (command === 'money') {
-            if (!data.economy) data.economy = {};
-            const user = data.economy[message.author.id] || { money: 0 };
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            const user = globalDbCache.economy[message.author.id] || { money: 0 };
             return message.reply(`💰 Saldo kamu saat ini: **$${(user.money || 0).toLocaleString('id-ID')}**`);
         }
 
@@ -1273,17 +1275,17 @@ client.on('messageCreate', async (message) => {
             const duel = activeDuels[message.author.id];
             if (!duel) return message.reply('Kamu tidak sedang ditantang!');
             
-            if (data.economy[duel.penantang]) {
-                data.economy[duel.penantang].money += duel.jumlah;
+            if (globalDbCache.economy[duel.penantang]) {
+                globalDbCache.economy[duel.penantang].money += duel.jumlah;
             }
             delete activeDuels[message.author.id];
             return message.channel.send(`🚫 ${message.author} menolak tantangan duel!`);
         }
 
         if (command === 'work') {
-            if (!data.economy) data.economy = {};
-            if (!data.economy[message.author.id]) data.economy[message.author.id] = { money: 0, lastWork: 0, cards: [], deck: [] };
-            const user = data.economy[message.author.id];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            if (!globalDbCache.economy[message.author.id]) globalDbCache.economy[message.author.id] = { money: 0, lastWork: 0, cards: [], deck: [] };
+            const user = globalDbCache.economy[message.author.id];
             const now = Date.now();
             if (now - (user.lastWork || 0) < 300000) {
                 return message.reply('⏳ Kamu capek! Istirahat dulu 5 menit.');
@@ -1292,14 +1294,14 @@ client.on('messageCreate', async (message) => {
             const reward = Math.floor(Math.random() * 500) + 100;
             user.money = (user.money || 0) + reward;
             user.lastWork = now; 
-            data.economy[message.author.id] = user;
+            globalDbCache.economy[message.author.id] = user;
             return message.reply(`💼 Kamu bekerja dan mendapatkan **$${reward}**!`);
         }
 
         if (command === 'gamble') {
             const amount = parseInt(args[0]);
-            if (!data.economy) data.economy = {};
-            const user = data.economy[message.author.id];
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            const user = globalDbCache.economy[message.author.id];
             if (!user || user.money < amount) return message.reply('❌ Uang kamu tidak cukup!');
             if (!amount || amount <= 0) return message.reply('Masukkan jumlah yang benar!');
 
@@ -1311,7 +1313,7 @@ client.on('messageCreate', async (message) => {
                 user.money -= amount;
                 message.reply(`💸 Kalah! Kamu kehilangan **$${amount}**. Saldo: $${user.money}`);
             }
-            data.economy[message.author.id] = user;
+            globalDbCache.economy[message.author.id] = user;
             return;
         }
 
@@ -1322,26 +1324,26 @@ client.on('messageCreate', async (message) => {
             if (!lawan || !jumlah || jumlah <= 0) return message.reply('Format: !bit @user [jumlah_taruhan]');
             if (lawan.id === message.author.id) return message.reply('Gak bisa lawan diri sendiri!');
 
-            const deckPenantang = data.economy?.[message.author.id]?.deck || [];
+            const deckPenantang = globalDbCache.economy?.[message.author.id]?.deck || [];
             if (deckPenantang.length === 0) return message.reply('✖️ Deck lu kosong! Pasang kartu andalan dulu pake \`!setdeck [ID]\`.');
 
-            const deckLawan = data.economy?.[lawan.id]?.deck || [];
+            const deckLawan = globalDbCache.economy?.[lawan.id]?.deck || [];
             if (deckLawan.length === 0) return message.reply(`✖️ <@${lawan.id}> belum menyusun deck aktifnya, tidak bisa diajak judi bit.`);
 
-            if ((data.economy[message.author.id]?.money || 0) < jumlah) return message.reply('✖️ Saldo dompet lu kagak cukup buat naruh taruhan segitu!');
-            if ((data.economy[lawan.id]?.money || 0) < jumlah) return message.reply('✖️ Saldo musuh lu gak cukup buat ngelayanin taruhan segitu!');
+            if ((globalDbCache.economy[message.author.id]?.money || 0) < jumlah) return message.reply('✖️ Saldo dompet lu kagak cukup buat naruh taruhan segitu!');
+            if ((globalDbCache.economy[lawan.id]?.money || 0) < jumlah) return message.reply('✖️ Saldo musuh lu gak cukup buat ngelayanin taruhan segitu!');
 
             if (activeDuels[lawan.id]) return message.reply('Lawan sedang ditantang orang lain, tunggu ya!');
 
-            data.economy[message.author.id].money -= jumlah;
+            globalDbCache.economy[message.author.id].money -= jumlah;
 
             activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
             message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} bertaruh judi deck sebesar **$${jumlah}**! Ketik \`!confirm\` atau \`!reject\` dalam 1 menit.`);
             
             return setTimeout(() => {
                 if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
-                    if (data.economy[message.author.id]) {
-                        data.economy[message.author.id].money += jumlah;
+                    if (globalDbCache.economy[message.author.id]) {
+                        globalDbCache.economy[message.author.id].money += jumlah;
                     }
                     delete activeDuels[lawan.id];
                     message.channel.send(`⏳ Tantangan taruhan dari ${message.author} untuk ${lawan} kedaluwarsa.`);
@@ -1356,33 +1358,33 @@ client.on('messageCreate', async (message) => {
             const idLawan = message.author.id; 
             const idPenantang = duel.penantang; 
 
-            if ((data.economy[idLawan]?.money || 0) < duel.jumlah) {
-                data.economy[idPenantang].money += duel.jumlah;
+            if ((globalDbCache.economy[idLawan]?.money || 0) < duel.jumlah) {
+                globalDbCache.economy[idPenantang].money += duel.jumlah;
                 delete activeDuels[message.author.id];
                 return message.channel.send('✖️ Pertarungan dibatalkan karena saldo penantang/lawan tidak mencukupi saat laga dimulai.');
             }
 
-            data.economy[idLawan].money -= duel.jumlah;
+            globalDbCache.economy[idLawan].money -= duel.jumlah;
 
-            const deckLawan = data.economy?.[idLawan]?.deck || [];
-            const deckPenantang = data.economy?.[idPenantang]?.deck || [];
+            const deckLawan = globalDbCache.economy?.[idLawan]?.deck || [];
+            const deckPenantang = globalDbCache.economy?.[idPenantang]?.deck || [];
 
             let powerPenantang = 0;
             deckPenantang.forEach(id => {
-                const k = data.economy[idPenantang].cards.find(c => c.id === id);
+                const k = globalDbCache.economy[idPenantang].cards.find(c => c.id === id);
                 if (k) powerPenantang += hitungPowerKartu(k.rarity);
             });
 
             let powerLawan = 0;
             deckLawan.forEach(id => {
-                const k = data.economy[idLawan].cards.find(c => c.id === id);
+                const k = globalDbCache.economy[idLawan].cards.find(c => c.id === id);
                 if (k) powerLawan += hitungPowerKartu(k.rarity);
             });
 
             const menangId = powerPenantang > powerLawan ? idPenantang : idLawan;
             const kalahId = menangId === idLawan ? idPenantang : idLawan;
 
-            data.economy[menangId].money += (duel.jumlah * 2);
+            globalDbCache.economy[menangId].money += (duel.jumlah * 2);
 
             let battleText = `🏆 **JUDI BIT DECK KARTU SELESAI!** 🏆\n\n`;
             battleText += `⚔️ **Deck Penantang (<@${idPenantang}>)**: Total Power \`${powerPenantang} PT\`\n`;
@@ -1398,17 +1400,17 @@ client.on('messageCreate', async (message) => {
             const penerima = message.mentions.members.first();
             const jumlah = parseInt(args[1]);
             if (!penerima || !jumlah || jumlah <= 0) return message.reply('Format: !givecash @user [jumlah]');
-            if (!data.economy) data.economy = {};
-            if (!data.economy[message.author.id] || data.economy[message.author.id].money < jumlah) return message.reply('Uang tidak cukup!');
-            data.economy[message.author.id].money -= jumlah;
-            if (!data.economy[penerima.id]) data.economy[penerima.id] = { money: 0, lastWork: 0, cards: [], deck: [] };
-            data.economy[penerima.id].money += jumlah;
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            if (!globalDbCache.economy[message.author.id] || globalDbCache.economy[message.author.id].money < jumlah) return message.reply('Uang tidak cukup!');
+            globalDbCache.economy[message.author.id].money -= jumlah;
+            if (!globalDbCache.economy[penerima.id]) globalDbCache.economy[penerima.id] = { money: 0, lastWork: 0, cards: [], deck: [] };
+            globalDbCache.economy[penerima.id].money += jumlah;
             return message.reply(`✅ Berhasil mengirim ${jumlah} ke ${penerima}!`);
         }
 
         if (command === 'leaderboard') {
-            if (!data.economy) data.economy = {};
-            const sorted = Object.entries(data.economy)
+            if (!globalDbCache.economy) globalDbCache.economy = {};
+            const sorted = Object.entries(globalDbCache.economy)
                 .sort((a, b) => (b[1].money || 0) - (a[1].money || 0))
                 .slice(0, 5);
             let text = '🏆 **Top 5 Orang Terkaya**:\n';
