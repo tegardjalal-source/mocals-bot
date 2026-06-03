@@ -46,6 +46,9 @@ const notifiedVideosCache = new Set();
 // CACHE UNTUK MEREKAM TIMESTAMPS PESAN PENGGUNA (ANTI-SPAM)
 const messageCounts = new Map();
 
+// FITUR BARU: RAM Local Cache untuk mengingat status keamanan server tanpa membebani database
+const securityDisabledGuilds = new Set();
+
 const youtube = google.youtube({
     version: 'v3',
     auth: process.env.YOUTUBE_API_KEY
@@ -115,6 +118,18 @@ async function sendUpdateLog(guild, content) {
 
 client.once('ready', async () => {
     console.log(`${client.user.tag} sudah siap beraksi!`);
+    
+    // FITUR BARU: Sinkronisasi data status keamanan server dari database ke RAM saat pertama kali menyala
+    const data = await fetchData();
+    if (data.serverSettings) {
+        for (const guildId in data.serverSettings) {
+            if (data.serverSettings[guildId].securityDisabled === true) {
+                securityDisabledGuilds.add(guildId);
+            }
+        }
+        console.log("🔒 Cache status sistem keamanan server berhasil dimuat.");
+    }
+
     checkYouTubeLiveStreams();
     setInterval(checkYouTubeLiveStreams, 60000);
     
@@ -218,54 +233,51 @@ client.on('messageCreate', async (message) => {
     // ========================================================
     // 🔥 FITUR INTEGRASI: DETEKSI ANTI-SPAM, PURGE & AUTO-KICK
     // ========================================================
-    // Bypass proteksi jika pengirim adalah Administrator atau memiliki izin mengelola pesan
-    if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
-        const userId = message.author.id;
-        const now = Date.now();
-        const LIMIT = 5; // Maksimal pesan dalam kurun waktu tertentu
-        const TIME_WINDOW = 3000; // Jendela waktu (3 detik)
+    // Pengecekan: Hanya jalankan anti-spam jika fitur keamanan TIDAK dimatikan di server ini
+    if (!securityDisabledGuilds.has(message.guild.id)) {
+        // Bypass proteksi jika pengirim adalah Administrator atau memiliki izin mengelola pesan
+        if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
+            const userId = message.author.id;
+            const now = Date.now();
+            const LIMIT = 5; 
+            const TIME_WINDOW = 3000; 
 
-        if (!messageCounts.has(userId)) {
-            messageCounts.set(userId, []);
-        }
+            if (!messageCounts.has(userId)) {
+                messageCounts.set(userId, []);
+            }
 
-        const timestamps = messageCounts.get(userId);
-        timestamps.push(now);
+            const timestamps = messageCounts.get(userId);
+            timestamps.push(now);
 
-        // Filter membuang log pesan yang di luar jendela waktu 3 detik
-        const recentMessages = timestamps.filter(ts => now - ts < TIME_WINDOW);
-        messageCounts.set(userId, recentMessages);
+            const recentMessages = timestamps.filter(ts => now - ts < TIME_WINDOW);
+            messageCounts.set(userId, recentMessages);
 
-        // Jika terdeteksi melanggar batas (Spamming)
-        if (recentMessages.length > LIMIT) {
-            try {
-                // 1. Ambil 20 pesan terakhir di channel tersebut lalu saring milik pelaku spam
-                const fetchedMessages = await message.channel.messages.fetch({ limit: 20 });
-                const messagesToDelete = fetchedMessages.filter(m => m.author.id === userId);
+            if (recentMessages.length > LIMIT) {
+                try {
+                    const fetchedMessages = await message.channel.messages.fetch({ limit: 20 });
+                    const messagesToDelete = fetchedMessages.filter(m => m.author.id === userId);
 
-                // 2. Hapus semua pesan terindikasi spam (Auto-Purge)
-                if (messagesToDelete.size > 0) {
-                    await message.channel.bulkDelete(messagesToDelete, true);
+                    if (messagesToDelete.size > 0) {
+                        await message.channel.bulkDelete(messagesToDelete, true);
+                    }
+
+                    if (message.member && message.member.kickable) {
+                        await message.member.kick('Spam berlebihan terdeteksi otomatis oleh sistem keamanan bot.');
+                        
+                        const antiSpamEmbed = new EmbedBuilder()
+                            .setColor('#ff0000')
+                            .setTitle('🚨 TINDAKAN AUTO-MODERASI')
+                            .setDescription(`**${message.author.tag}** telah ditendang dari server karena melakukan spamming secara berlebihan. Seluruh pesan terduga spam telah dibersihkan secara massal!`)
+                            .setTimestamp();
+                        
+                        message.channel.send({ embeds: [antiSpamEmbed] });
+                    }
+
+                    messageCounts.delete(userId); 
+                    return; // ⛔ STOP EKSEKUSI!
+                } catch (err) {
+                    console.error('Gagal memproses eksekusi sistem anti-spam:', err);
                 }
-
-                // 3. Eksekusi Kick dari Server (Auto-Kick)
-                if (message.member && message.member.kickable) {
-                    await message.member.kick('Spam berlebihan terdeteksi otomatis oleh sistem keamanan bot.');
-                    
-                    // Kirim log notifikasi pemberitahuan ke channel chat
-                    const antiSpamEmbed = new EmbedBuilder()
-                        .setColor('#ff0000')
-                        .setTitle('🚨 TINDAKAN AUTO-MODERASI')
-                        .setDescription(`**${message.author.tag}** telah ditendang dari server karena melakukan spamming secara berlebihan. Seluruh pesan terduga spam telah dibersihkan secara massal!`)
-                        .setTimestamp();
-                    
-                    message.channel.send({ embeds: [antiSpamEmbed] });
-                }
-
-                messageCounts.delete(userId); // Bersihkan cache memori pengguna
-                return; // ⛔ STOP EKSEKUSI! Menghentikan bot membaca perintah / menambah XP di bawahnya.
-            } catch (err) {
-                console.error('Gagal memproses eksekusi sistem anti-spam:', err);
             }
         }
     }
@@ -318,7 +330,7 @@ client.on('messageCreate', async (message) => {
             if (message.member.permissions.has('Administrator')) {
                 helpEmbed.addFields({
                     name: '🛠️ Perintah Khusus Administrator (Rahasia)',
-                    value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!teshbd`',
+                    value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!teshbd`, `!enablesecurity`, `!disablesecurity`',
                     inline: false
                 });
                 helpEmbed.setColor('#ff0000'); 
@@ -437,6 +449,29 @@ client.on('messageCreate', async (message) => {
             return message.reply(`✅ Lapak rahasia dikunci! Info selundupan Black Market harian akan dikirim otomatis ke channel ${ch}.`);
         }
 
+        // === FITUR COMMAND ADMIN KHUSUS: MENGATUR SWITCH ON/OFF SISTEM KEAMANAN ===
+        if (command === 'enablesecurity' && message.member.permissions.has('Administrator')) {
+            if (!data.serverSettings) data.serverSettings = {};
+            if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+            
+            data.serverSettings[message.guild.id].securityDisabled = false;
+            await saveData(data);
+            securityDisabledGuilds.delete(message.guild.id); // Hapus dari daftar RAM "fitur mati"
+            
+            return message.reply('✅ **Sistem Keamanan Aktif!** Fitur Anti-Spam, Auto-Purge, dan Auto-Kick sekarang berjalan penuh di server ini.');
+        }
+
+        if (command === 'disablesecurity' && message.member.permissions.has('Administrator')) {
+            if (!data.serverSettings) data.serverSettings = {};
+            if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
+            
+            data.serverSettings[message.guild.id].securityDisabled = true;
+            await saveData(data);
+            securityDisabledGuilds.add(message.guild.id); // Daftarkan ke RAM cache sebagai server yang menonaktifkan fitur
+            
+            return message.reply('⚠️ **Sistem Keamanan Dimatikan!** Fitur Anti-Spam dan Auto-Kick telah dinonaktifkan. Gunakan `!enablesecurity` untuk menghidupkannya kembali.');
+        }
+
         // 🔮 === CORE LOGIKA: MULTI-TIER LUCK GACHA ENGINE SYSTEM === 🔮
         const gachaTiers = {
             'gacha': { name: 'Normal', price: 500, allowedRarity: ['C', 'R', 'SR', 'SSR'], text: 'bebas apa aja' },
@@ -454,7 +489,7 @@ client.on('messageCreate', async (message) => {
             const userWallet = data.economy[userId];
 
             if (userWallet.money < config.price) {
-                return message.reply(`✖️ Dompet lu kering! Opsi gacha **!${command}** butuh dana hoki sebesar **$${config.price.toLocaleString('id-ID')}**, tabungan lu cuma ada **$${userWallet.money.toLocaleString('id-ID')}**.`);
+                return message.reply(`✖️ Dompet lu kering! Opsy gacha **!${command}** butuh dana hoki sebesar **$${config.price.toLocaleString('id-ID')}**, tabungan lu cuma ada **$${userWallet.money.toLocaleString('id-ID')}**.`);
             }
 
             const loadingMsg = await message.reply(`🔮 Menghubungi bursa MyAnimeList... Menyalakan ritual **${config.name} Roll** (${config.text})...`);
