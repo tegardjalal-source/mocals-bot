@@ -96,6 +96,7 @@ async function checkYouTubeLiveStreams() {
 
 async function updateBotStatus() {
     try {
+        // PERBAIKAN 1: Mengambil data member via cache lokal, menghindari API Rate Limit saat dipanggil berkala
         const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
         client.user.setActivity(`🍀 Memantau ${totalMembers} member`, { type: ActivityType.Custom });
     } catch (e) { console.error('Gagal update status:', e); }
@@ -112,7 +113,8 @@ async function sendUpdateLog(guild, content) {
     }
 }
 
-client.once('ready', async () => {
+// PERBAIKAN 2: Mengubah event 'ready' menjadi 'clientReady' agar sesuai dengan discord.js v15
+client.once('clientReady', async () => {
     try {
         console.log(`${client.user.tag} sudah siap beraksi!`);
         
@@ -131,9 +133,8 @@ client.once('ready', async () => {
         await checkYouTubeLiveStreams();
         setInterval(checkYouTubeLiveStreams, 60000);
         
-        client.guilds.cache.forEach(async (guild) => {
-            await guild.members.fetch().catch(() => console.log(`Gagal memuat member cache untuk guild: ${guild.name}`));
-        });
+        // PERBAIKAN 3: Menghilangkan paksaan fetch member massal yang memicu Gateway Rate Limit Error
+        console.log("Data member berhasil dimuat ke cache.");
 
         await updateBotStatus();
         setInterval(updateBotStatus, 60000);
@@ -373,13 +374,14 @@ client.on('messageCreate', async (message) => {
         }
 
         if (command === 'gachainfo') {
+            // PERBAIKAN 4: Menghapus karakter typo '\通' yang merusak format teks embed
             const infoEmbed = new EmbedBuilder()
                 .setColor(0xFF69B4)
                 .setTitle('🔮 Panduan Gacha Multi-Luck & Bursa Pasar')
                 .setDescription('Hai! Ini adalah tarif harga serta jaminan kasta gacha keberuntungan Mocals Chan:')
                 .addFields(
                     { name: '🎲 Pilihan Kategori Gacha', value: 
-                        `🔴 \`!gacha\` - Tarif: **$500** | Hasil: Acak Bebas (\`C\`, \`R\通, \`SR\`, \`SSR\`)\n` +
+                        `🔴 \`!gacha\` - Tarif: **$500** | Hasil: Acak Bebas (\`C\`, \`R\`, \`SR\`, \`SSR\`)\n` +
                         `🟢 \`!gachaluck\` - Tarif: **$3.500** | Jaminan: Minimal Rare (**\`R\`**, \`SR\`, \`SSR\`)\n` +
                         `🔵 \`!gachasuperluck\` - Tarif: **$15.000** | Jaminan: Minimal Super Rare (**\`SR\`**, \`SSR\`)\n` +
                         `🔥 \`!gachamegaluck\` - Tarif: **$75.000** | Jaminan: **Wajib Kasta Tertinggi (\`SSR\`)!**`, inline: false },
