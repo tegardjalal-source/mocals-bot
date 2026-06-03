@@ -46,8 +46,11 @@ const notifiedVideosCache = new Set();
 // CACHE UNTUK MEREKAM TIMESTAMPS PESAN PENGGUNA (ANTI-SPAM)
 const messageCounts = new Map();
 
-// FITUR BARU: RAM Local Cache untuk mengingat status keamanan server tanpa membebani database
+// RAM KEAMANAN CACHE: Mengingat status on/off security server
 const securityDisabledGuilds = new Set();
+
+// 🔥 OPTIMASI UTAMA: Variable database global yang disimpan langsung di RAM Bot
+let globalDbCache = {};
 
 const youtube = google.youtube({
     version: 'v3',
@@ -56,8 +59,8 @@ const youtube = google.youtube({
 
 // === ANTI-SPAM YOUTUBE LIVE ===
 async function checkYouTubeLiveStreams() {
-    const data = await fetchData();
-    const channels = data.ytChannels || [];
+    // Menggunakan database RAM, bukan request API eksternal
+    const channels = globalDbCache.ytChannels || [];
 
     for (const channelId of channels) {
         try {
@@ -71,8 +74,8 @@ async function checkYouTubeLiveStreams() {
             const isLive = videoRes.data.items[0].snippet.liveBroadcastContent === 'live';
             if (isLive && !notifiedVideosCache.has(videoId)) {
                 console.log(`Channel ${channelId} sedang LIVE!`);
-                for (const guildId in data.serverSettings) {
-                    const logChannelId = data.serverSettings[guildId].ytLogChannel;
+                for (const guildId in globalDbCache.serverSettings) {
+                    const logChannelId = globalDbCache.serverSettings[guildId].ytLogChannel;
                     if (logChannelId) {
                         const channel = client.channels.cache.get(logChannelId);
                         if (channel) {
@@ -105,8 +108,7 @@ async function updateBotStatus() {
 }
 
 async function sendUpdateLog(guild, content) {
-    const data = await fetchData();
-    const logChannelId = data.serverSettings?.[guild.id]?.logChannelId;
+    const logChannelId = globalDbCache.serverSettings?.[guild.id]?.logChannelId;
     if (!logChannelId) return;
     const channel = guild.channels.cache.get(logChannelId);
     if (channel) {
@@ -119,15 +121,18 @@ async function sendUpdateLog(guild, content) {
 client.once('ready', async () => {
     console.log(`${client.user.tag} sudah siap beraksi!`);
     
-    // FITUR BARU: Sinkronisasi data status keamanan server dari database ke RAM saat pertama kali menyala
-    const data = await fetchData();
-    if (data.serverSettings) {
-        for (const guildId in data.serverSettings) {
-            if (data.serverSettings[guildId].securityDisabled === true) {
+    // 1. Ambil seluruh data JSONBin SEKALI SAJA saat bot menyala, lalu simpan ke RAM
+    globalDbCache = await fetchData();
+    console.log("📦 Seluruh data dari JSONBin sukses dimuat ke RAM Bot.");
+
+    // 2. Sinkronisasikan status keamanan server ke RAM Cache
+    if (globalDbCache.serverSettings) {
+        for (const guildId in globalDbCache.serverSettings) {
+            if (globalDbCache.serverSettings[guildId].securityDisabled === true) {
                 securityDisabledGuilds.add(guildId);
             }
         }
-        console.log("🔒 Cache status sistem keamanan server berhasil dimuat.");
+        console.log("🔒 Cache status switch sistem keamanan server berhasil disinkronkan.");
     }
 
     checkYouTubeLiveStreams();
@@ -140,19 +145,24 @@ client.once('ready', async () => {
     }
     updateBotStatus();
     setInterval(updateBotStatus, 60000);
+
+    // 3. AUTO-SAVE SYSTEM: Otomatis menyalin data dari RAM ke JSONBin secara berkala tiap 30 detik
+    setInterval(async () => {
+        await saveData(globalDbCache);
+        console.log("💾 [Auto-Save] Data RAM berhasil dicadangkan ke JSONBin harian.");
+    }, 30000);
 });
 
 // === LOGIKA AUTOMATION JAM 00:00 (ULANG TAHUN & REFRESH BLACK MARKET) ===
 cron.schedule('0 0 * * *', async () => {
-    const data = await fetchData();
     const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return;
 
     // 1. Logika Selamat Ulang Tahun
     const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace('/', '-'); 
 
-    for (const userId in data.hbd) {
-        if (data.hbd[userId] === today) {
+    for (const userId in globalDbCache.hbd) {
+        if (globalDbCache.hbd[userId] === today) {
             const member = await guild.members.fetch(userId).catch(() => null);
             if (member) {
                 const hbdRoleId = '1509897738215624744'; 
@@ -168,13 +178,13 @@ cron.schedule('0 0 * * *', async () => {
 
     // 2. Logika Bursa Gelap (Black Market) Otomatis
     console.log("🔄 Jam 00:00: Meriset barang di Black Market...");
-    data.blackMarket = [];
+    globalDbCache.blackMarket = [];
 
     for (let i = 0; i < 5; i++) {
         const kartu = await jalankanGacha('biasa');
         if (kartu && kartu.sukses) {
             const hargaBM = Math.floor(Math.random() * 900) + 300; 
-            data.blackMarket.push({
+            globalDbCache.blackMarket.push({
                 listingId: `BM-${Math.floor(1000 + Math.random() * 9000)}`,
                 id: kartu.id,
                 name: kartu.name,
@@ -189,7 +199,7 @@ cron.schedule('0 0 * * *', async () => {
     const kartuSpesial = await jalankanGacha('megaluck');
     if (kartuSpesial && kartuSpesial.sukses) {
         const hargaBMSpesial = Math.floor(Math.random() * 2000) + 1500; 
-        data.blackMarket.push({
+        globalDbCache.blackMarket.push({
             listingId: `BM-PREM`,
             id: kartuSpesial.id,
             name: kartuSpesial.name,
@@ -199,14 +209,14 @@ cron.schedule('0 0 * * *', async () => {
         });
     }
 
-    await saveData(data);
+    // Sistem akan tersimpan otomatis via Auto-Save harian, tidak perlu saveData manual di sini
 
-    const targetChannelId = data.serverSettings?.[guild.id]?.bmChannelId;
+    const targetChannelId = globalDbCache.serverSettings?.[guild.id]?.bmChannelId;
     const bmChannel = targetChannelId ? guild.channels.cache.get(targetChannelId) : (guild.systemChannel || guild.channels.cache.find(c => c.type === 0));
 
-    if (bmChannel && data.blackMarket.length > 0) {
+    if (bmChannel && globalDbCache.blackMarket.length > 0) {
         let bmText = '🚨 **BLACK MARKET TELAH DI-RESET! (BERLAKU 24 JAM)** 🚨\n*Penyelundup kartu ilegal telah datang membawa barang dagangan baru:*\n\n';
-        data.blackMarket.forEach((item) => {
+        globalDbCache.blackMarket.forEach((item) => {
             if (item.isPremium) {
                 bmText += `🔥 **[PREMIUM ITEM] ${item.name}** [${item.rarity}]\n`;
             } else {
@@ -233,14 +243,14 @@ client.on('messageCreate', async (message) => {
     // ========================================================
     // 🔥 FITUR INTEGRASI: DETEKSI ANTI-SPAM, PURGE & AUTO-KICK
     // ========================================================
-    // Pengecekan: Hanya jalankan anti-spam jika fitur keamanan TIDAK dimatikan di server ini
     if (!securityDisabledGuilds.has(message.guild.id)) {
-        // Bypass proteksi jika pengirim adalah Administrator atau memiliki izin mengelola pesan
         if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
             const userId = message.author.id;
             const now = Date.now();
-            const LIMIT = 5; 
-            const TIME_WINDOW = 3000; 
+            
+            // 💡 ANGKA TESTING MANUAL: Diubah agar pengetikan tangan manusia keburu memicu bot
+            const LIMIT = 3;        // Pesan ke-4 dikirim langsung di-kick
+            const TIME_WINDOW = 8000; // Rentang waktu dilonggarkan jadi 8 detik agar keburu dicoba manual
 
             if (!messageCounts.has(userId)) {
                 messageCounts.set(userId, []);
@@ -254,7 +264,8 @@ client.on('messageCreate', async (message) => {
 
             if (recentMessages.length > LIMIT) {
                 try {
-                    const fetchedMessages = await message.channel.messages.fetch({ limit: 20 });
+                    // OPTIMASI: Melacak sampai 50 chat terakhir agar tidak ada chat spam tersisa
+                    const fetchedMessages = await message.channel.messages.fetch({ limit: 50 });
                     const messagesToDelete = fetchedMessages.filter(m => m.author.id === userId);
 
                     if (messagesToDelete.size > 0) {
@@ -308,7 +319,8 @@ client.on('messageCreate', async (message) => {
         command = args.shift().toLowerCase();
     }
 
-    let data = await fetchData();
+    // Pembacaan data dialihkan ke RAM lokal cache agar bot super kencang tanpa lag internet
+    let data = globalDbCache; 
 
     // === KELOMPOK COMMAND 1: CORE & ADMIN CONFIG (TIDAK DAPAT XP) ===
     if (isCommand) {
@@ -445,18 +457,16 @@ client.on('messageCreate', async (message) => {
             if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
             
             data.serverSettings[message.guild.id].bmChannelId = ch.id;
-            await saveData(data);
             return message.reply(`✅ Lapak rahasia dikunci! Info selundupan Black Market harian akan dikirim otomatis ke channel ${ch}.`);
         }
 
-        // === FITUR COMMAND ADMIN KHUSUS: MENGATUR SWITCH ON/OFF SISTEM KEAMANAN ===
+        // === FITUR COMMAND ADMIN KHUSUS: MENGATUR SWITCH ON/OFF KEAMANAN ===
         if (command === 'enablesecurity' && message.member.permissions.has('Administrator')) {
             if (!data.serverSettings) data.serverSettings = {};
             if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
             
             data.serverSettings[message.guild.id].securityDisabled = false;
-            await saveData(data);
-            securityDisabledGuilds.delete(message.guild.id); // Hapus dari daftar RAM "fitur mati"
+            securityDisabledGuilds.delete(message.guild.id); 
             
             return message.reply('✅ **Sistem Keamanan Aktif!** Fitur Anti-Spam, Auto-Purge, dan Auto-Kick sekarang berjalan penuh di server ini.');
         }
@@ -466,8 +476,7 @@ client.on('messageCreate', async (message) => {
             if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
             
             data.serverSettings[message.guild.id].securityDisabled = true;
-            await saveData(data);
-            securityDisabledGuilds.add(message.guild.id); // Daftarkan ke RAM cache sebagai server yang menonaktifkan fitur
+            securityDisabledGuilds.add(message.guild.id); 
             
             return message.reply('⚠️ **Sistem Keamanan Dimatikan!** Fitur Anti-Spam dan Auto-Kick telah dinonaktifkan. Gunakan `!enablesecurity` untuk menghidupkannya kembali.');
         }
@@ -512,8 +521,6 @@ client.on('messageCreate', async (message) => {
                     userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
                 }
 
-                await saveData(data);
-
                 const warnaRarity = { 'SSR': '#ff0055', 'SR': '#ffaa00', 'R': '#00aaff', 'C': '#aaaaaa' };
                 const cardEmbed = new EmbedBuilder()
                     .setTitle(`🎉 GACHA BERHASIL! [${hasil.rarity}]`)
@@ -555,7 +562,6 @@ client.on('messageCreate', async (message) => {
 
             if (userWallet.deck.includes(cardId)) {
                 userWallet.deck = userWallet.deck.filter(id => id !== cardId);
-                await saveData(data);
                 return message.reply(`✅ Kartu **${punyaKartu.name}** berhasil dilepas dari deck aktif lu.`);
             }
 
@@ -564,7 +570,6 @@ client.on('messageCreate', async (message) => {
             }
 
             userWallet.deck.push(cardId);
-            await saveData(data);
             return message.reply(`✅ **${punyaKartu.name}** [${punyaKartu.rarity}] berhasil dipasang ke deck tempur lu! (${userWallet.deck.length}/3)`);
         }
 
@@ -641,8 +646,6 @@ client.on('messageCreate', async (message) => {
                 rarity: kartu.rarity,
                 price: hargaJual
             });
-
-            await saveData(data);
 
             const sellEmbed = new EmbedBuilder()
                 .setColor('#ffaa00')
@@ -734,7 +737,6 @@ client.on('messageCreate', async (message) => {
             }
 
             data.market.splice(marketIndex, 1);
-            await saveData(data);
 
             const buyEmbed = new EmbedBuilder()
                 .setColor('#00ff55')
@@ -788,7 +790,6 @@ client.on('messageCreate', async (message) => {
             }
 
             data.blackMarket.splice(bmIndex, 1);
-            await saveData(data);
 
             const bmBuyEmbed = new EmbedBuilder()
                 .setColor('#1a1a1a')
@@ -836,8 +837,6 @@ client.on('messageCreate', async (message) => {
                     isPremium: true
                 });
             }
-
-            await saveData(data);
 
             const targetChannelId = data.serverSettings?.[message.guild.id]?.bmChannelId;
             const destChannel = targetChannelId ? message.guild.channels.cache.get(targetChannelId) : message.channel;
@@ -959,7 +958,6 @@ client.on('messageCreate', async (message) => {
             if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
             
             data.serverSettings[message.guild.id].ytLogChannel = ch.id;
-            await saveData(data);
             return message.reply(`✅ Channel notification live diatur ke ${ch}`);
         }
 
@@ -970,7 +968,6 @@ client.on('messageCreate', async (message) => {
             if (data.ytChannels.includes(id)) return message.reply('Channel sudah ada di list!');
             
             data.ytChannels.push(id);
-            await saveData(data);
             return message.reply(`✅ Channel ${id} berhasil ditambahkan!`);
         }
 
@@ -1022,7 +1019,6 @@ client.on('messageCreate', async (message) => {
             const id = args[0];
             if (!data.ytChannels) return message.reply('List channel kosong!');
             data.ytChannels = data.ytChannels.filter(c => c !== id);
-            await saveData(data);
             return message.reply(`✅ Channel ${id} dihapus dari list.`);
         }
 
@@ -1033,7 +1029,6 @@ client.on('messageCreate', async (message) => {
             if (!data.serverSettings) data.serverSettings = {};
             if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
             data.serverSettings[message.guild.id].welcomeId = ch.id;
-            await saveData(data);
             return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
         }
 
@@ -1043,7 +1038,6 @@ client.on('messageCreate', async (message) => {
             if (!data.serverSettings) data.serverSettings = {};
             if (!data.serverSettings[message.guild.id]) data.serverSettings[message.guild.id] = {};
             data.serverSettings[message.guild.id].leaveId = ch.id;
-            await saveData(data);
             return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
         }
         
@@ -1063,7 +1057,6 @@ client.on('messageCreate', async (message) => {
             if (!ch) return message.reply('Tag channel!');
             if (!data.serverSettings) data.serverSettings = {};
             data.serverSettings[message.guild.id] = { logChannelId: ch.id };
-            await saveData(data);
             return message.reply(`✅ Log diatur ke ${ch}`);
         }
         
@@ -1104,7 +1097,6 @@ client.on('messageCreate', async (message) => {
         data.xp[message.author.id].xp = 0;
         message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${data.xp[message.author.id].level}**! ✨`);
     }
-    await saveData(data);
 
     // === KELOMPOK COMMAND 2: UTILITY & ECONOMY (DAPAT XP) ===
     if (isCommand) {
@@ -1231,7 +1223,6 @@ client.on('messageCreate', async (message) => {
             }
             if (!data.hbd) data.hbd = {};
             data.hbd[message.author.id] = tgl;
-            await saveData(data);
             return message.reply('✅ Tanggal ultah disimpan!');
         }
 
@@ -1261,7 +1252,6 @@ client.on('messageCreate', async (message) => {
             user.money += reward;
             user.lastWork = now; 
             data.economy[message.author.id] = user;
-            await saveData(data);
             return message.reply(`💼 Kamu bekerja dan mendapatkan **${reward}**!`);
         }
 
@@ -1281,7 +1271,6 @@ client.on('messageCreate', async (message) => {
                 message.reply(`💸 Kalah! Kamu kehilangan **${amount}**. Saldo: ${user.money}`);
             }
             data.economy[message.author.id] = user;
-            await saveData(data);
             return;
         }
 
@@ -1347,7 +1336,6 @@ client.on('messageCreate', async (message) => {
 
             data.economy[menangId].money += duel.jumlah;
             data.economy[kalahId].money -= duel.jumlah;
-            await saveData(data);
 
             let battleText = `🏆 **JUDI BIT DECK KARTU SELESAI!** 🏆\n\n`;
             battleText += `⚔️ **Deck Penantang (<@${idPenantang}>)**: Total Power \`${powerPenantang} PT\`\n`;
@@ -1368,7 +1356,6 @@ client.on('messageCreate', async (message) => {
             data.economy[message.author.id].money -= jumlah;
             if (!data.economy[penerima.id]) data.economy[penerima.id] = { money: 0, lastWork: 0 };
             data.economy[penerima.id].money += jumlah;
-            await saveData(data);
             return message.reply(`✅ Berhasil mengirim ${jumlah} ke ${penerima}!`);
         }
 
@@ -1388,8 +1375,7 @@ client.on('messageCreate', async (message) => {
 
 // --- EVENT JOIN & LEAVE ---
 client.on('guildMemberAdd', async (member) => { 
-    const data = await fetchData(); 
-    const serverData = data.serverSettings?.[member.guild.id];
+    const serverData = globalDbCache.serverSettings?.[member.guild.id];
     const welcomeId = serverData ? serverData.welcomeId : null;
 
     if (welcomeId) {
@@ -1399,8 +1385,7 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 client.on('guildMemberRemove', async (member) => { 
-    const data = await fetchData(); 
-    const serverData = data.serverSettings?.[member.guild.id];
+    const serverData = globalDbCache.serverSettings?.[member.guild.id];
     const leaveId = serverData ? serverData.leaveId : null;
 
     if (leaveId) {
