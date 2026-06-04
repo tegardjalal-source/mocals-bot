@@ -7,6 +7,7 @@ const { jalankanGacha } = require('./gachaEngine');
 
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
+const GUILD_ID = 'ID_SERVER_UTAMA_KAMU_DISINI';
 let isDatabaseLoaded = false;
 
 async function fetchData() {
@@ -94,10 +95,21 @@ async function checkYouTubeLiveStreams() {
     }
 }
 
+// 🍀 FUNGSI BARU UNTUK MONITORING STATUS MEMBER ONLINE & OFFLINE
 async function updateBotStatus() {
     try {
-        const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
-        client.user.setActivity(`🍀 Memantau ${totalMembers} member`, { type: ActivityType.Custom });
+        const guild = client.guilds.cache.get(GUILD_ID);
+        if (!guild) {
+            console.warn(`[Status Monitor] Server dengan ID ${GUILD_ID} tidak ditemukan. Pastikan ID server benar.`);
+            return;
+        }
+        const members = await guild.members.fetch({ withPresences: true });
+        const onlineCount = members.filter(m => !m.user.bot && m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)).size;
+        const totalHumans = members.filter(m => !m.user.bot).size;
+        const offlineCount = totalHumans - onlineCount;
+        
+        client.user.setActivity(`🍀 𝑶𝒏𝒍𝒊𝒏𝒆: ${onlineCount} | 🍁 𝑶𝒇𝒇𝒍𝒊𝒏𝒆: ${offlineCount}`, { type: ActivityType.Custom });
+        console.log(`[Status Monitor] Status diperbarui. Online: ${onlineCount} | Offline: ${offlineCount}`);
     } catch (e) { console.error('Gagal update status:', e); }
 }
 
@@ -112,7 +124,8 @@ async function sendUpdateLog(guild, content) {
     }
 }
 
-client.once('clientReady', async () => {
+// 🛠️ PERBAIKAN: Mengubah 'clientReady' menjadi 'ready' agar terpanggil dengan benar
+client.once('ready', async () => {
     try {
         console.log(`${client.user.tag} sudah siap beraksi!`);
         
@@ -133,8 +146,9 @@ client.once('clientReady', async () => {
         
         console.log("Data member berhasil dimuat ke cache.");
 
+        // Menjalankan update status pertama kali secara berkala setiap 5 menit
         await updateBotStatus();
-        setInterval(updateBotStatus, 60000);
+        setInterval(updateBotStatus, 5 * 60 * 1000); 
 
         setInterval(async () => {
             await saveData(globalDbCache);
