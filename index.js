@@ -112,7 +112,7 @@ async function sendUpdateLog(guild, content) {
     }
 }
 
-client.once('clientReady', async () => {
+client.once('ready', async () => {
     try {
         console.log(`${client.user.tag} sudah siap beraksi!`);
         
@@ -232,7 +232,6 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
-// Cache Map global untuk melacak batasan durasi warn (5 menit)
 if (!global.userWarnsCache) {
     global.userWarnsCache = new Map();
 }
@@ -241,7 +240,6 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
     const guildId = message.guild.id;
 
-    // 🔥 DETEKSI ANTI-SPAM, PURGE & AUTO-KICK (WARN VALID 5 MENIT)
     if (!securityDisabledGuilds.has(guildId)) {
         if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
             const userId = message.author.id;
@@ -271,7 +269,6 @@ client.on('messageCreate', async (message) => {
 
                     const warnExpiryTime = global.userWarnsCache.get(userId);
                     
-                    // Jika belum pernah mendapatkan warn, ATAU waktu warn lamanya sudah hangus (lewat dari 5 menit)
                     if (!warnExpiryTime || now > warnExpiryTime) {
                         
                         const limaMenit = 5 * 60 * 1000; 
@@ -287,7 +284,6 @@ client.on('messageCreate', async (message) => {
                         messageCounts.delete(userId); 
 
                     } else {
-                        // Jika nekat melanggar lagi di dalam sekat waktu 5 menit pengawasan
                         if (message.member && message.member.kickable) {
                             await message.member.kick('Spam berlebihan di dalam masa pengawasan 5 menit.');
                             
@@ -310,7 +306,6 @@ client.on('messageCreate', async (message) => {
             }
         }
     }
-    // ========================================================
 
     if (message.mentions.has(client.user.id) && !message.content.startsWith('!')) {
         const helpEmbed = new EmbedBuilder()
@@ -345,7 +340,7 @@ client.on('messageCreate', async (message) => {
                 .addFields(
                     { name: 'ℹ️ Hiburan & Informasi', value: '`!ping`, `!halo`, `!gabutnih`, `!rank`, `!8ball`, `!coinflip`, `!remind`, `!userinfo`, `!serverinfo`, `!status`, `!info`', inline: false },
                     { name: '💰 Ekonomi & Toko Pasar', value: '`!money`, `!work`, `!gamble`, `!leaderboard`, `!givecash`', inline: false },
-                    { name: '⚔️ Duel Formasi Deck & Taruhan', value: '`!setdeck [ID_MAL]` (Pasang/copot kartu), `!deck` (Cek deck), `!duel @user` (Latihan), `!bit @user [jumlah]` (Taruhan koin), `!confirm`, `!reject`', inline: false },
+                    { name: '⚔️ Duel Formasi Deck & Taruhan', value: '`!setdeck [ID_MAL]` (Pasang/copot kartu), `!deck` (Cek deck), `!duel @user` (Latihan), `!bit @user [jumlah]` (Taruhan koin dengan sistem Reaksi Emoji)', inline: false },
                     { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`, `!sethbdrole @role` (Admin Only)', inline: false },
                     { name: '🔮 Gacha Multi-Luck & Album Kartu', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!gachainfo`, `!collection`, `!charinfo`, `!topcollector`', inline: false },
                     { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Etalase toko.\n`!buycard [Kode]`, `!buybm [Kode]`', inline: false },
@@ -1293,17 +1288,6 @@ client.on('messageCreate', async (message) => {
             return message.reply(`💰 Saldo kamu saat ini: **$${(user.money || 0).toLocaleString('id-ID')}**`);
         }
 
-        if (command === 'reject') {
-            const duel = activeDuels[message.author.id];
-            if (!duel) return message.reply('Kamu tidak sedang ditantang!');
-            
-            if (globalDbCache.economy[duel.penantang]) {
-                globalDbCache.economy[duel.penantang].money += duel.jumlah;
-            }
-            delete activeDuels[message.author.id];
-            return message.channel.send(`🚫 ${message.author} menolak tantangan duel!`);
-        }
-
         if (command === 'work') {
             if (!globalDbCache.economy) globalDbCache.economy = {};
             if (!globalDbCache.economy[message.author.id]) globalDbCache.economy[message.author.id] = { money: 0, lastWork: 0, cards: [], deck: [] };
@@ -1339,6 +1323,7 @@ client.on('messageCreate', async (message) => {
             return;
         }
 
+        // 🔥 INTEGRASI TOTAL SISTEM REACT UNTUK JUDI BIT DECK KARTU
         if (command === 'bit') {
             const lawan = message.mentions.members.first();
             const jumlah = parseInt(args[1]);
@@ -1358,63 +1343,70 @@ client.on('messageCreate', async (message) => {
             if (activeDuels[lawan.id]) return message.reply('Lawan sedang ditantang orang lain, tunggu ya!');
 
             globalDbCache.economy[message.author.id].money -= jumlah;
-
             activeDuels[lawan.id] = { penantang: message.author.id, jumlah: jumlah };
-            message.channel.send(`⚔️ ${lawan}, kamu ditantang oleh ${message.author} bertaruh judi deck sebesar **$${jumlah}**! Ketik \`!confirm\` atau \`!reject\` dalam 1 menit.`);
+
+            const pesanTantangan = await message.channel.send(`⚔️ <@${lawan.id}>, kamu ditantang oleh ${message.author} bertaruh judi deck sebesar **$${jumlah}**!\nKlik reaksi **✅** untuk menerima atau **❌** untuk menolak (Waktu: 1 menit).`);
             
-            return setTimeout(() => {
-                if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
-                    if (globalDbCache.economy[message.author.id]) {
-                        globalDbCache.economy[message.author.id].money += jumlah;
+            await pesanTantangan.react('✅');
+            await pesanTantangan.react('❌');
+
+            const filter = (reaction, user) => {
+                return ['✅', '❌'].includes(reaction.emoji.name) && user.id === lawan.id;
+            };
+
+            pesanTantangan.awaitReactions({ filter, max: 1, time: 60000, errors: ['time'] })
+                .then(async (collected) => {
+                    const reaction = collected.first();
+
+                    if (reaction.emoji.name === '✅') {
+                        const idLawan = lawan.id; 
+                        const idPenantang = message.author.id; 
+
+                        if ((globalDbCache.economy[idLawan]?.money || 0) < jumlah) {
+                            globalDbCache.economy[idPenantang].money += jumlah; 
+                            delete activeDuels[idLawan];
+                            return message.channel.send(`✖️ Pertarungan dibatalkan karena saldo <@${idLawan}> mendadak tidak mencukupi.`);
+                        }
+
+                        globalDbCache.economy[idLawan].money -= jumlah;
+
+                        let powerPenantang = 0;
+                        deckPenantang.forEach(id => {
+                            const k = globalDbCache.economy[idPenantang].cards.find(c => c.id === id);
+                            if (k) powerPenantang += hitungPowerKartu(k.rarity);
+                        });
+
+                        let powerLawan = 0;
+                        deckLawan.forEach(id => {
+                            const k = globalDbCache.economy[idLawan].cards.find(c => c.id === id);
+                            if (k) powerLawan += hitungPowerKartu(k.rarity);
+                        });
+
+                        const menangId = powerPenantang > powerLawan ? idPenantang : idLawan;
+                        globalDbCache.economy[menangId].money += (jumlah * 2);
+
+                        let battleText = `🏆 **JUDI BIT DECK KARTU SELESAI!** 🏆\n\n`;
+                        battleText += `⚔️ **Deck Penantang (<@${idPenantang}>)**: Total Power \`${powerPenantang} PT\`\n`;
+                        battleText += `🛡️ **Deck Lawan (<@${idLawan}>)**: Total Power \`${powerLawan} PT\`\n\n`;
+                        battleText += `👑 Selamat untuk <@${menangId}> karena formasi deck lu menang unggul dan berhak membawa pulang total hadiah **$${jumlah * 2}**!`;
+
+                        message.channel.send(battleText);
+                        delete activeDuels[idLawan];
+                    } 
+                    else if (reaction.emoji.name === '❌') {
+                        globalDbCache.economy[message.author.id].money += jumlah; 
+                        delete activeDuels[lawan.id];
+                        message.channel.send(`🚫 <@${lawan.id}> menolak tantangan duel!`);
                     }
-                    delete activeDuels[lawan.id];
-                    message.channel.send(`⏳ Tantangan taruhan dari ${message.author} untuk ${lawan} kedaluwarsa.`);
-                }
-            }, 60000);
-        }
+                })
+                .catch(() => {
+                    if (activeDuels[lawan.id] && activeDuels[lawan.id].penantang === message.author.id) {
+                        globalDbCache.economy[message.author.id].money += jumlah; 
+                        delete activeDuels[lawan.id];
+                        message.channel.send(`⏳ Tantangan taruhan dari ${message.author} untuk <@${lawan.id}> kedaluwarsa karena tidak ada respons.`);
+                    }
+                });
 
-        if (command === 'confirm') {
-            const duel = activeDuels[message.author.id];
-            if (!duel) return message.reply('Kamu tidak sedang ditantang!');
-            
-            const idLawan = message.author.id; 
-            const idPenantang = duel.penantang; 
-
-            if ((globalDbCache.economy[idLawan]?.money || 0) < duel.jumlah) {
-                globalDbCache.economy[idPenantang].money += duel.jumlah;
-                delete activeDuels[message.author.id];
-                return message.channel.send('✖️ Pertarungan dibatalkan karena saldo penantang/lawan tidak mencukupi saat laga dimulai.');
-            }
-
-            globalDbCache.economy[idLawan].money -= duel.jumlah;
-
-            const deckLawan = globalDbCache.economy?.[idLawan]?.deck || [];
-            const deckPenantang = globalDbCache.economy?.[idPenantang]?.deck || [];
-
-            let powerPenantang = 0;
-            deckPenantang.forEach(id => {
-                const k = globalDbCache.economy[idPenantang].cards.find(c => c.id === id);
-                if (k) powerPenantang += hitungPowerKartu(k.rarity);
-            });
-
-            let powerLawan = 0;
-            deckLawan.forEach(id => {
-                const k = globalDbCache.economy[idLawan].cards.find(c => c.id === id);
-                if (k) powerLawan += hitungPowerKartu(k.rarity);
-            });
-
-            const menangId = powerPenantang > powerLawan ? idPenantang : idLawan;
-            const kalahId = menangId === idLawan ? idPenantang : idLawan;
-
-            globalDbCache.economy[menangId].money += (duel.jumlah * 2);
-
-            let battleText = `🏆 **JUDI BIT DECK KARTU SELESAI!** 🏆\n\n`;
-            battleText += `⚔️ **Deck Penantang (<@${idPenantang}>)**: Total Power \`${powerPenantang} PT\`\n`;
-            battleText += `🛡️ **Deck Lawan (<@${idLawan}>)**: Total Power \`${powerLawan} PT\`\n\n`;
-            battleText += `👑 Selamat untuk <@${menangId}> karena formasi deck lu menang unggul dan berhak membawa pulang total hadiah **$${duel.jumlah * 2}**!`;
-
-            message.channel.send(battleText);
-            delete activeDuels[message.author.id];
             return;
         }
 
