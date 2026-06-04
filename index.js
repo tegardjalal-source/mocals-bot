@@ -5,9 +5,16 @@ const cron = require('node-cron');
 const { google } = require('googleapis');
 const { jalankanGacha } = require('./gachaEngine');
 
+// 🌐 INTEGRASI EXPRESS & XML PARSER UNTUK WEBHOOK DETEKSI LONCENG
+const express = require('express');
+const xml2js = require('xml2js');
+const app = express();
+app.use(express.text({ type: ['application/xml', 'text/xml', 'application/atom+xml'] }));
+
 const BIN_ID = '6a19995121f9ee59d299ebec'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
 const GUILD_ID = '746583847734345741';
+const YOUR_BOT_URL = process.env.BOT_URL; // Diambil otomatis dari file .env
 let isDatabaseLoaded = false;
 
 async function fetchData() {
@@ -58,42 +65,89 @@ const youtube = google.youtube({
     auth: process.env.YOUTUBE_API_KEY
 });
 
-async function checkYouTubeLiveStreams() {
+// 🔔 FUNGSI BARU: Mendaftarkan Lonceng Otomatis (PubSubHubbub) ke Server Google
+async function daftarkanSemuaLoncengYouTube() {
     const channels = globalDbCache.ytChannels || [];
+    if (channels.length === 0) return;
+    if (!YOUR_BOT_URL) {
+        console.warn("⚠️ [YouTube Lonceng] Pendaftaran dibatalkan: BOT_URL belum diatur di file .env");
+        return;
+    }
 
+    console.log(`🔗 Menyelaraskan sistem lonceng otomatis untuk ${channels.length} channel...`);
+    
     for (const channelId of channels) {
+        const topicUrl = `https://www.youtube.com/xml/feeds/videos.xml?channel_id=${channelId}`;
+        const callbackUrl = `${YOUR_BOT_URL}/youtube/webhook`;
+
+        const params = new URLSearchParams();
+        params.append('hub.callback', callbackUrl);
+        params.append('hub.topic', topicUrl);
+        params.append('hub.mode', 'subscribe');
+        params.append('hub.lease_seconds', '432000'); // Lonceng aktif di server Google selama 5 hari
+
         try {
-            const playlistId = 'UU' + channelId.substring(2);
-            const res = await youtube.playlistItems.list({ playlistId, part: 'snippet', maxResults: 1 });
-            if (!res.data.items || !res.data.items.length) continue;
-            
-            const videoId = res.data.items[0].snippet.resourceId.videoId;
-            const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' });
-            if (!videoRes.data.items || !videoRes.data.items.length) continue;
-            
-            const isLive = videoRes.data.items[0].snippet.liveBroadcastContent === 'live';
-            if (isLive && !notifiedVideosCache.has(videoId)) {
-                console.log(`Channel ${channelId} sedang LIVE!`);
-                for (const guildId in globalDbCache.serverSettings) {
-                    const logChannelId = globalDbCache.serverSettings[guildId].ytLogChannel;
-                    if (logChannelId) {
-                        const channel = client.channels.cache.get(logChannelId) || await client.channels.fetch(logChannelId).catch(() => null);
-                        if (channel) {
-                            channel.send(`@everyone 🚨 **Ada yang lagi live nihh, jangan lupa mampir yaa...** https://www.youtube.com/watch?v=${videoId}`);
-                        }
-                    }
-                }
-                notifiedVideosCache.add(videoId);
-            } 
-            else if (!isLive && notifiedVideosCache.has(videoId)) {
-                notifiedVideosCache.delete(videoId);
-                console.log(`Live streaming ${videoId} telah selesai. Cache dibersihkan.`);
-            }
-        } catch (err) { 
-            console.error(`Error cek channel ${channelId}:`, err.message);
+            await axios.post('https://pubsubhubbub.appspot.com/subscribe', params, {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+            console.log(`✅ Lonceng aktif bebas kuota harian untuk Channel ID: ${channelId}`);
+        } catch (err) {
+            console.error(`❌ Gagal menyalakan sistem lonceng pada channel ${channelId}:`, err.message);
         }
     }
 }
+
+// 🌐 WEBHOOK ROUTER GET: Tempat Google melakukan verifikasi jabat tangan (Handshake)
+app.get('/youtube/webhook', (req, res) => {
+    const challenge = req.query['hub.challenge'];
+    if (challenge) {
+        console.log("🔒 Google Webhook Handshake berhasil divalidasi.");
+        return res.status(200).send(challenge);
+    }
+    return res.status(400).send('Bad Request');
+});
+
+// 🌐 WEBHOOK ROUTER POST: Tempat Google melempar sinyal setiap kali YouTuber membuat live stream
+app.post('/youtube/webhook', async (req, res) => {
+    res.status(200).send('OK'); // Langsung balas Google agar antrean rilis
+
+    try {
+        const parser = new xml2js.Parser({ explicitArray: false });
+        const result = await parser.parseStringPromise(req.body);
+        
+        if (!result.feed || !result.feed.entry) return;
+
+        const entry = result.feed.entry;
+        const videoId = entry['yt:videoId'];
+        const title = entry.title;
+        const channelName = entry.author?.name || "Kreator kesayangan kamu";
+
+        if (notifiedVideosCache.has(videoId)) return;
+
+        // Amankan 1 unit kuota hanya untuk memilah apakah sinyal ini video biasa atau Live Stream asli
+        const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' }).catch(() => null);
+        if (!videoRes || !videoRes.data.items || !videoRes.data.items.length) return;
+
+        const isLive = videoRes.data.items[0].snippet.liveBroadcastContent === 'live';
+
+        if (isLive) {
+            console.log(`🚨 [Lonceng Terpicu] ${channelName} terpantau sedang LIVE!`);
+            notifiedVideosCache.add(videoId);
+
+            for (const guildId in globalDbCache.serverSettings) {
+                const logChannelId = globalDbCache.serverSettings[guildId].ytLogChannel;
+                if (logChannelId) {
+                    const channel = client.channels.cache.get(logChannelId) || await client.channels.fetch(logChannelId).catch(() => null);
+                    if (channel) {
+                        channel.send(`@everyone 🚨 **Ada yang lagi live nihh, jangan lupa mampir yaa...**\n🎥 **${title}**\n🔗 https://www.youtube.com/watch?v=${videoId}`);
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Gagal mengeksekusi payload lonceng otomatis:', err.message);
+    }
+});
 
 async function updateBotStatus() {
     try {
@@ -123,7 +177,8 @@ async function sendUpdateLog(guild, content) {
     }
 }
 
-client.once('ready', async () => {
+// Menggunakan 'clientReady' demi keamanan pembaruan pustaka v14 / v15 ke depan
+client.once('clientReady', async () => {
     try {
         console.log(`${client.user.tag} sudah siap beraksi!`);
         
@@ -139,8 +194,11 @@ client.once('ready', async () => {
             console.log("🔒 Cache status switch sistem keamanan server berhasil disinkronkan.");
         }
 
-        await checkYouTubeLiveStreams();
-        setInterval(checkYouTubeLiveStreams, 60000);
+        // Jalankan pendaftaran sistem lonceng otomatis saat bot mulai beroperasi
+        await daftarkanSemuaLoncengYouTube();
+        
+        // Daftarkan ulang setiap 3 hari (karena server Google otomatis menghapus lonceng setelah 5 hari)
+        setInterval(daftarkanSemuaLoncengYouTube, 3 * 24 * 60 * 60 * 1000);
         
         console.log("Data member berhasil dimuat ke cache.");
 
@@ -335,7 +393,6 @@ client.on('messageCreate', async (message) => {
 
     const isCommand = message.content.startsWith('!');
     if (!isCommand) {
-        // Sistem Pengumpul XP / Message harian (Bukan Command)
         if (!globalDbCache.messages) globalDbCache.messages = {};
         globalDbCache.messages[message.author.id] = (globalDbCache.messages[message.author.id] || 0) + 1;
         if (!globalDbCache.xp) globalDbCache.xp = {};
@@ -348,10 +405,9 @@ client.on('messageCreate', async (message) => {
             globalDbCache.xp[message.author.id].xp = 0;
             message.channel.send(`🎉 Selamat ${message.author}, kamu naik ke **Level ${globalDbCache.xp[message.author.id].level}**! ✨`);
         }
-        return; // Hentikan di sini jika bukan command
+        return; 
     }
 
-    // Jika pesan adalah command
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
@@ -1023,6 +1079,8 @@ client.on('messageCreate', async (message) => {
         if (globalDbCache.ytChannels.includes(id)) return message.reply('Channel sudah ada di list!');
         
         globalDbCache.ytChannels.push(id);
+        // Daftarkan sistem lonceng secara realtime ke Google ketika channel baru ditambahkan
+        daftarkanSemuaLoncengYouTube();
         return message.reply(`✅ Channel ${id} berhasil ditambahkan!`);
     }
 
@@ -1030,6 +1088,7 @@ client.on('messageCreate', async (message) => {
         const channels = globalDbCache.ytChannels || [];
         if (channels.length === 0) return message.reply('Belum ada channel.');
 
+        // Menggunakan kuota API hanya ketika memanggil daftar list secara manual di Discord
         const channelDetails = await Promise.all(channels.map(async (id) => {
             try {
                 const res = await youtube.channels.list({ id: id, part: 'snippet' });
@@ -1045,32 +1104,9 @@ client.on('messageCreate', async (message) => {
         if (!message.member.permissions.has('Administrator')) {
             return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
         }
-        message.reply('🔄 Memulai pengecekan live YouTube secara manual...');
-        const channels = globalDbCache.ytChannels || [];
-        const logChannelId = globalDbCache.serverSettings?.[guildId]?.ytLogChannel;
-        const targetChannel = logChannelId ? (client.channels.cache.get(logChannelId) || await client.channels.fetch(logChannelId).catch(() => null)) : null;
-
-        if (!logChannelId || !targetChannel) {
-            return message.channel.send('❌ Channel notifikasi belum diatur. Gunakan `!setchannelnotif #channel`!');
-        }
-
-        let found = false;
-        for (const channelId of channels) {
-            try {
-                const playlistId = 'UU' + channelId.substring(2);
-                const res = await youtube.playlistItems.list({ playlistId, part: 'snippet', maxResults: 1 });
-                if (!res.data.items || !res.data.items.length) continue;
-                
-                const videoId = res.data.items[0].snippet.resourceId.videoId;
-                const videoRes = await youtube.videos.list({ id: videoId, part: 'snippet' });
-                if (videoRes.data.items[0]?.snippet?.liveBroadcastContent === 'live') {
-                    targetChannel.send(`📢 **[TEST]** Channel YouTube sedang LIVE! https://www.youtube.com/watch?v=${videoId}`);
-                    found = true;
-                }
-            } catch (err) { console.error(`Error test channel ${channelId}:`, err.message); }
-        }
-        if (!found) message.channel.send('⚠️ Tidak ada channel di list yang sedang live saat ini.');
-        return message.channel.send('✅ Pengecekan manual selesai.');
+        message.reply('🔄 Memulai simulasi pendaftaran ulang sistem lonceng YouTube harian...');
+        await daftarkanSemuaLoncengYouTube();
+        return message.channel.send('✅ Pengecekan pendaftaran manual selesai.');
     }
 
     if (command === 'removechannel') {
@@ -1467,6 +1503,12 @@ client.on('guildMemberRemove', async (member) => {
         const ch = member.guild.channels.cache.get(leaveId) || await member.guild.channels.fetch(leaveId).catch(() => null);
         if (ch) ch.send(`Dadah ${member.user.tag}, sampai jumpa lagi! 😢`);
     }
+});
+
+// 🌐 NYALAKAN SERVER PORT WEBHOOK DI BAGIAN PALING BAWAH
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🌐 Server Web Penadah Lonceng YouTube aktif di port ${PORT}`);
 });
 
 client.login(process.env.DISCORD_TOKEN);
