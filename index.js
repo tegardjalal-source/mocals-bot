@@ -5,7 +5,7 @@ const cron = require('node-cron');
 const { google } = require('googleapis');
 const { jalankanGacha } = require('./gachaEngine');
 
-const BIN_ID = '6a19995121f9ee59d299ebec'; 
+const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
 const GUILD_ID = '746583847734345741';
 let isDatabaseLoaded = false;
