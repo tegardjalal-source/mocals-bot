@@ -1,19 +1,14 @@
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const axios = require('axios');
 
-// Fungsi untuk load font (dilakukan sekali di awal)
 async function loadFonts() {
     try {
         const fontRes = await axios.get('https://github.com/google/fonts/raw/main/ofl/roboto/Roboto-Bold.ttf', { responseType: 'arraybuffer' });
         GlobalFonts.register(fontRes.data, 'Roboto');
         return true;
-    } catch (err) {
-        console.error('⚠️ Font gagal dimuat:', err.message);
-        return false;
-    }
+    } catch (err) { return false; }
 }
 
-// Jalankan load font sekali pas bot pertama kali nyala
 let fontReady = false;
 loadFonts().then(success => { fontReady = success; });
 
@@ -21,20 +16,25 @@ async function createCustomImage(type, member, bgUrl) {
     const canvas = createCanvas(700, 250);
     const ctx = canvas.getContext('2d');
 
+    // Link gambar sudah dikunci permanen di sini
+    const finalBgUrl = 'https://i.imgur.com/pVQfBWI.png';
+
     // 1. Background Blur
-    const finalBgUrl = bgUrl || 'https://i.postimg.cc/0j2x1X9Z/bg.png';
     try {
-        const response = await axios.get(finalBgUrl, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const response = await axios.get(finalBgUrl, { 
+            responseType: 'arraybuffer', 
+            headers: { 'User-Agent': 'Mozilla/5.0' } 
+        });
         const background = await loadImage(response.data); 
         ctx.filter = 'blur(5px)'; 
         ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
-        ctx.filter = 'none'; // WAJIB: Reset filter agar teks tidak ikut blur
+        ctx.filter = 'none'; 
     } catch (err) {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // 2. Avatar
+    // 2. Avatar Bulat di Tengah
     try {
         const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 256 });
         const avatarRes = await axios.get(avatarUrl, { responseType: 'arraybuffer' });
@@ -53,13 +53,12 @@ async function createCustomImage(type, member, bgUrl) {
         ctx.restore();
     } catch (err) {}
 
-    // 3. Teks Hitam dengan Stroke Putih
+    // 3. Teks Hitam dengan Stroke Putih (Sesuai keinginanmu)
     ctx.textAlign = 'center';  
     ctx.strokeStyle = '#ffffff'; 
     ctx.lineWidth = 8;
     ctx.fillStyle = '#000000';   
     
-    // Gunakan 'Roboto' jika berhasil dimuat, kalau gagal fallback ke 'sans-serif'
     const fontName = fontReady ? 'Roboto' : 'sans-serif';
     
     ctx.font = `bold 50px ${fontName}`;
