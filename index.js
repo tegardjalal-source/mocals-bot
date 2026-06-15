@@ -3,9 +3,11 @@ const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ChannelType } = r
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
+const express = require('express'); // 🚀 Library baru untuk Web Server Webhook
+const bodyParser = require('body-parser'); // 🚀 Library baru untuk membaca paket data
 const { jalankanGacha } = require('./gachaEngine');
 const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); 
-const { handleDonationCommands } = require('./donation'); // 💳 HUBUNGKAN FILE DONASI BARU
+const { handleDonationCommands, handleSaweriaWebhook } = require('./donation'); // 💳 Menghubungkan fungsi donasi & webhook otomatis
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -202,8 +204,31 @@ cron.schedule('0 0 * * *', async () => {
     console.log("🔄 Jam 00:00: Mengeksekusi rutinitas harian di semua server...");
     
     const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace(/\//g, '-'); 
+    const waktuSekarang = Date.now();
+
     for (const [guildId, guild] of client.guilds.cache) {
         try {
+            // 🚨 LOGIKA AUTO-REMOVE EXPIRATION VIP DONATUR (JAM 00:00)
+            if (globalDbCache.vipUsers) {
+                const savedVipRoleId = globalDbCache.donationConfig?.vipRoleId;
+                
+                for (const userId in globalDbCache.vipUsers) {
+                    const userVipData = globalDbCache.vipUsers[userId];
+                    
+                    if (userVipData.expireAt < waktuSekarang) {
+                        const expiredMember = await guild.members.fetch(userId).catch(() => null);
+                        
+                        if (expiredMember && savedVipRoleId) {
+                            if (expiredMember.roles.cache.has(savedVipRoleId)) {
+                                await expiredMember.roles.remove(savedVipRoleId).catch(console.error);
+                                console.log(`🗑️ [VIP Expired] Role VIP dicopot otomatis dari ${userVipData.username}`);
+                            }
+                        }
+                        delete globalDbCache.vipUsers[userId];
+                    }
+                }
+            }
+
             if (globalDbCache.hbd) {
                 for (const userId in globalDbCache.hbd) {
                     if (globalDbCache.hbd[userId] === today) {
@@ -413,7 +438,7 @@ client.on('messageCreate', async (message) => {
         if (message.member.permissions.has('Administrator')) {
             helpEmbed.addFields({
                 name: '🛠️ Perintah Khusus Administrator (Rahasia)',
-                value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`, `!donationlogset #channel`, `!addvip @user [hari]`',
+                value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`, `!donationlogset #channel`, `!viproleset @role`, `!addvip @user [hari]`',
                 inline: false
             });
             helpEmbed.setColor('#ff0000'); 
@@ -499,7 +524,7 @@ client.on('messageCreate', async (message) => {
 
             const charEmbed = new EmbedBuilder()
                 .setColor('#ff69b4')
-                .setTitle(`👤 Profil Karakter: ${name}${kanjiName}`)
+                .setTitle('👤 Profil Karakter: {name}{kanjiName}')
                 .setURL(url)
                 .setDescription(about)
                 .setThumbnail(imageUrl)
@@ -1472,7 +1497,7 @@ client.on('messageCreate', async (message) => {
     await handleDonationCommands(message, command, args, globalDbCache);
 
     // 💾 BACKUP OTOMATIS: Bila data krusial diubah admin, paksa simpan langsung ke JSONBin
-    if (command === 'createjoin' || command === 'addvip' || command === 'donationlogset') {
+    if (command === 'createjoin' || command === 'addvip' || command === 'donationlogset' || command === 'viproleset') {
         try {
             await saveData(globalDbCache);
             console.log(`💾 [Auto-Save] Perubahan data krusial (${command}) berhasil dicadangkan ke JSONBin.`);
@@ -1500,6 +1525,26 @@ client.on('guildMemberRemove', async (member) => {
         const ch = member.guild.channels.cache.get(leaveId) || await member.guild.channels.fetch(leaveId).catch(() => null);
         if (ch) ch.send(`Dadah ${member.user.tag}, sampai jumpa lagi! 😢`);
     }
+});
+
+// ─── 🚀 WEB SERVER WEBHOOK SAWERIA INTEGRATION ───
+const app = express();
+app.use(bodyParser.json());
+
+app.post('/saweria-webhook', async (req, res) => {
+    const donationData = req.body;
+
+    if (donationData && donationData.amount) {
+        // Oper data donasi asli ke file donation.js untuk diproses otomatis oleh Mocals Chan
+        await handleSaweriaWebhook(client, donationData, globalDbCache, saveData);
+    }
+
+    return res.status(200).send({ status: 'Success received by Mocals Chan' });
+});
+
+const PORT_WEB = 3000;
+app.listen(PORT_WEB, () => {
+    console.log(`🚀 [Web Server Webhook] Mendengarkan notifikasi Saweria aktif di port :${PORT_WEB}`);
 });
 
 client.login(process.env.DISCORD_TOKEN);
