@@ -148,7 +148,7 @@ async function updateBotStatus() {
         const totalHumans = members.filter(m => !m.user.bot).size;
         const offlineCount = totalHumans - onlineCount;
         
-        client.user.setActivity(`🍀 𝑶𝒏𝒍𝒊𝒏𝒆: ${onlineCount} | 🍁 𝑶𝒇𝒇𝒍𝒊Offline: ${offlineCount}`, { type: ActivityType.Custom });
+        client.user.setActivity(`🍀 𝙊𝙣𝙡𝙞𝙣𝙚: ${onlineCount} | 🍁 𝙊𝙛𝙛𝙡𝙞𝙣𝙚: ${offlineCount}`, { type: ActivityType.Custom });
         console.log(`[Status Monitor] Status diperbarui. Online: ${onlineCount} | Offline: ${offlineCount}`);
     } catch (e) { console.error('Gagal update status:', e); }
 }
