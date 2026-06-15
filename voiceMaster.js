@@ -53,12 +53,13 @@ function initVoiceMaster(client, globalDbCache) {
                     .setDescription(
                         `Halo ${member}! Room privat ini dikontrol penuh olehmu.\n\n` +
                         `**Command Khusus Owner Room:**\n` +
-                        `🔹 \`!limitvoice [angka]\` - Mengatur batas maksimal slot member di room kamu.\n` +
-                        `*Contoh: \`!limitvoice 5\` (Maksimal 5 orang saja yang bisa masuk).*`
+                        `🔹 \`!limitvoice [angka]\` - Mengatur batas maksimal slot member (0-99).\n` +
+                        `🔹 \`!namevoice [nama]\` - Mengubah nama room privatmu.\n` +
+                        `🔹 \`!kickvoice @user\` - Menendang user lain keluar dari room privatmu.`
                     )
                     .setTimestamp();
 
-                // Kirim ke text-chat internal milik Voice Channel tersebut (fitur bawaan Discord baru)
+                // Kirim ke text-chat internal milik Voice Channel tersebut
                 await roomBaru.send({ content: `${member}`, embeds: [sapaanEmbed] });
 
             } catch (err) {
@@ -92,16 +93,21 @@ function initVoiceMaster(client, globalDbCache) {
 async function handleVoiceMasterCommands(message, command, args, globalDbCache) {
     const guildId = message.guild.id;
 
-    // ─── PERINTAH ADMIN 1: !createjoin #channel ───
+    // ─── PERINTAH ADMIN 1: !createjoin #channel ATAU !createjoin [ID_ANGKA] ───
     if (command === 'createjoin') {
         if (!message.member.permissions.has('Administrator')) {
             return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
         }
 
-        // Ambil channel yang di-tag oleh admin (mentions)
-        const targetChannel = message.mentions.channels.first();
+        let targetChannel = message.mentions.channels.first();
+        const inputId = args[0];
+
+        if (!targetChannel && inputId) {
+            targetChannel = message.guild.channels.cache.get(inputId);
+        }
+
         if (!targetChannel || targetChannel.type !== ChannelType.GuildVoice) {
-            return message.reply('✖️ Format salah! Silakan tag Voice Channel tujuannya.\nContoh: `!createjoin #Buat-Room`');
+            return message.reply('✖️ Format salah! Silakan tag Voice Channel atau masukkan ID mentahnya.\nContoh 1: `!createjoin #Buat-Room`\nContoh 2: `!createjoin 1515871624866566274`');
         }
 
         if (!globalDbCache.voiceHubs) globalDbCache.voiceHubs = [];
@@ -113,7 +119,31 @@ async function handleVoiceMasterCommands(message, command, args, globalDbCache) 
         return message.reply(`✅ Berhasil! ${targetChannel} sekarang aktif menjadi Hub **Create to Join**.`);
     }
 
-    // ─── PERINTAH ADMIN 2: !checkcreatelist ───
+    // ─── PERINTAH ADMIN 2: !removevoice [ID_ANGKA] ───
+    if (command === 'removevoice') {
+        if (!message.member.permissions.has('Administrator')) {
+            return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+        }
+
+        const inputId = args[0];
+        if (!inputId) {
+            return message.reply('✖️ Format salah! Masukkan ID Voice Channel Hub yang ingin dihapus dari list.\nContoh: `!removevoice 1515871624866566274`');
+        }
+
+        if (!globalDbCache.voiceHubs || globalDbCache.voiceHubs.length === 0) {
+            return message.reply('✖️ Daftar pantauan Voice Hub di server ini memang sedang kosong.');
+        }
+
+        if (!globalDbCache.voiceHubs.includes(inputId)) {
+            return message.reply('✖️ ID Voice Channel tersebut tidak ditemukan di dalam daftar pantauan bot!');
+        }
+
+        // Hapus ID dari array database RAM
+        globalDbCache.voiceHubs = globalDbCache.voiceHubs.filter(id => id !== inputId);
+        return message.reply(`🗑️ Berhasil! Voice Hub dengan ID \`${inputId}\` telah dihapus dari daftar pantauan bot.`);
+    }
+
+    // ─── PERINTAH ADMIN 3: !checkcreatelist ───
     if (command === 'checkcreatelist') {
         if (!message.member.permissions.has('Administrator')) {
             return message.reply('✖️ Khusus Administrator server.');
@@ -132,32 +162,74 @@ async function handleVoiceMasterCommands(message, command, args, globalDbCache) 
         return message.reply(listText);
     }
 
-    // ─── PERINTAH PUBLIC: !limitvoice [angka] ───
-    if (command === 'limitvoice') {
+    // ─── PERINTAH PUBLIC PRODAK: PROTEKSI KEPEMILIKAN ROOM PRIVAT ───
+    const voiceMasterCommands = ['limitvoice', 'namevoice', 'kickvoice'];
+    if (voiceMasterCommands.includes(command)) {
         const voiceChannel = message.member.voice.channel;
 
-        // Proteksi 1: Cek apakah user sedang berada di voice channel privat
+        // Cek apakah user berada di voice channel privat buatan bot
         if (!voiceChannel || !dynamicVoiceChannels.has(voiceChannel.id)) {
             return message.reply('✖️ Kamu harus berada di dalam **Room Privat buatanmu sendiri** untuk menggunakan perintah ini!');
         }
 
-        // Proteksi 2: Cek apakah dia punya hak kelola channel (artinya dia owner pembuat room privat tersebut)
+        // Cek apakah user adalah Owner sejati dari room tersebut
         if (!voiceChannel.permissionsFor(message.member).has(PermissionFlagsBits.ManageChannels)) {
-            return message.reply('✖️ Kamu bukan pemilik room privat ini, tidak berhak mengatur limit!');
+            return message.reply('✖️ Kamu bukan pemilik room privat ini, tidak berhak mengaturnya!');
         }
 
-        const limitAngka = parseInt(args[0]);
-        if (isNaN(limitAngka) || limitAngka < 0 || limitAngka > 99) {
-            return message.reply('✖️ Masukkan angka limit yang valid antara **0 sampai 99**!\n*(Angka 0 berarti tidak ada batas/unlimited).*');
+        // ─── PERINTAH PUBLIC 1: !limitvoice [angka] ───
+        if (command === 'limitvoice') {
+            const limitAngka = parseInt(args[0]);
+            if (isNaN(limitAngka) || limitAngka < 0 || limitAngka > 99) {
+                return message.reply('✖️ Masukkan angka limit yang valid antara **0 sampai 99**!\n*(Angka 0 berarti tanpa batas/unlimited).*');
+            }
+
+            try {
+                await voiceChannel.setUserLimit(limitAngka);
+                return message.reply(`✅ Batas kuota room berhasil diubah menjadi **${limitAngka === 0 ? 'Tanpa Batas (Unlimited)' : limitAngka + ' Orang'}**.`);
+            } catch (err) {
+                return message.reply('✖️ Gagal mengubah limit room karena keterbatasan izin bot.');
+            }
         }
 
-        try {
-            // Ubah batas maksimal user di channel tersebut secara realtime
-            await voiceChannel.setUserLimit(limitAngka);
-            return message.reply(`✅ Batas kuota room berhasil diubah menjadi **${limitAngka === 0 ? 'Tanpa Batas (Unlimited)' : limitAngka + ' Orang'}**.`);
-        } catch (err) {
-            console.error(err);
-            return message.reply('✖️ Gagal mengubah limit room karena keterbatasan izin bot.');
+        // ─── PERINTAH PUBLIC 2: !namevoice [nama_baru] ───
+        if (command === 'namevoice') {
+            const namaBaru = args.join(' ');
+            if (!namaBaru) {
+                return message.reply('✖️ Format salah! Masukkan nama baru untuk room kamu.\nContoh: `!namevoice Room Mabar Wifi`');
+            }
+            if (namaBaru.length > 30) {
+                return message.reply('✖️ Nama room terlalu panjang! Maksimal cuma boleh **30 karakter**.');
+            }
+
+            try {
+                await voiceChannel.setName(`🔊 ${namaBaru}`);
+                return message.reply(`✅ Nama room privat kamu berhasil diubah menjadi: **🔊 ${namaBaru}**`);
+            } catch (err) {
+                return message.reply('✖️ Gagal mengubah nama room. Discord membatasi pergantian nama channel terlalu sering (Rate limit). Coba lagi beberapa menit kemudian!');
+            }
+        }
+
+        // ─── PERINTAH PUBLIC 3: !kickvoice @user ───
+        if (command === 'kickvoice') {
+            const targetMember = message.mentions.members.first();
+            if (!targetMember) {
+                return message.reply('✖️ Format salah! Silakan tag member yang ingin ditendang keluar.\nContoh: `!kickvoice @NamaUser`');
+            }
+
+            if (targetMember.voice.channelId !== voiceChannel.id) {
+                return message.reply('✖️ User tersebut tidak sedang berada di dalam room privat kamu!');
+            }
+            if (targetMember.id === message.author.id) {
+                return message.reply('✖️ Kamu tidak bisa menendang dirimu sendiri kocak!');
+            }
+
+            try {
+                await targetMember.voice.setChannel(null);
+                return message.reply(`🚨 Berhasil! <@${targetMember.id}> telah ditendang keluar dari room privat kamu.`);
+            } catch (err) {
+                return message.reply('✖️ Gagal menendang user. Pastikan Role milik Mocals Bot berada di posisi tinggi dan punya izin `Move Members`.');
+            }
         }
     }
 }
