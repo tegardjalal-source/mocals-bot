@@ -10,7 +10,7 @@ const { ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js')
 async function handleDonationCommands(message, command, args, globalDbCache) {
     // Pastikan database struktur VIP dan config sudah ada di memori RAM
     if (!globalDbCache.vipUsers) globalDbCache.vipUsers = {};
-    if (!globalDbCache.donationConfig) globalDbCache.donationConfig = { logChannelId: null };
+    if (!globalDbCache.donationConfig) globalDbCache.donationConfig = { logChannelId: null, vipRoleId: null };
 
     // ─── PERINTAH PUBLIC 1: !donate ───
     if (command === 'donate') {
@@ -44,19 +44,31 @@ async function handleDonationCommands(message, command, args, globalDbCache) {
             return message.reply('✖️ Perintah rahasia! Hanya bisa digunakan oleh **Administrator**.');
         }
 
-        // Ambil channel teks yang di-tag oleh admin
         const targetChannel = message.mentions.channels.first();
         if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
             return message.reply('✖️ Format salah! Silakan tag Text Channel tujuannya.\nContoh: `!donationlogset #💸-donation-log`');
         }
 
-        // Simpan ID channel ke database RAM config
         globalDbCache.donationConfig.logChannelId = targetChannel.id;
-
         return message.reply(`✅ **Sukses!** Channel <#${targetChannel.id}> sekarang resmi menjadi tempat pengumuman donasi Mocals Chan.`);
     }
 
-    // ─── PERINTAH ADMIN 2: !addvip @user [jumlah_hari] ───
+    // ─── PERINTAH ADMIN 2: !viproleset @role ───
+    if (command === 'viproleset') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply('✖️ Perintah rahasia! Hanya bisa digunakan oleh **Administrator**.');
+        }
+
+        const targetRole = message.mentions.roles.first();
+        if (!targetRole) {
+            return message.reply('✖️ Format salah! Silakan tag Role yang ingin dijadikan hadiah VIP.\nContoh: `!viproleset @VIP Donator`');
+        }
+
+        globalDbCache.donationConfig.vipRoleId = targetRole.id;
+        return message.reply(`✅ **Sukses!** Role **${targetRole.name}** sekarang resmi diatur sebagai Role otomatis untuk donatur VIP.`);
+    }
+
+    // ─── PERINTAH ADMIN 3: !addvip @user [jumlah_hari] ───
     if (command === 'addvip') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('✖️ Perintah rahasia! Hanya bisa digunakan oleh **Administrator**.');
@@ -86,6 +98,14 @@ async function handleDonationCommands(message, command, args, globalDbCache) {
             year: 'numeric', month: 'long', day: 'numeric'
         });
 
+        // 🌟 LOGIKA BARU 1: OTOMATIS BERIKAN ROLE VIP SECARA FISIK DI DISCORD
+        const savedRoleId = globalDbCache.donationConfig.vipRoleId;
+        if (savedRoleId) {
+            await targetMember.roles.add(savedRoleId).catch(err => {
+                console.error(`❌ Gagal memberikan role VIP ke ${targetMember.user.username}:`, err.message);
+            });
+        }
+
         // AMBIL ID CHANNEL LOG DARI DATABASE YANG SUDAH DI-SET ADMIN
         const savedLogChannelId = globalDbCache.donationConfig.logChannelId;
         const logChannel = message.guild.channels.cache.get(savedLogChannelId);
@@ -102,7 +122,7 @@ async function handleDonationCommands(message, command, args, globalDbCache) {
                     `• Status: **VIP Donatur active!**\n` +
                     `• Durasi: **${jumlahHari} Hari**\n` +
                     `• Berlaku Sampai: **${tanggalSelesai}**\n\n` +
-                    `*Koin harian & kerja milik <@${targetMember.id}> sekarang berlipat ganda 2x lebih banyak! Nikmati keistimewaanmu, bos! 💸*`
+                    `*Koin harian & kerja milik <@${targetMember.id}> sekarang berlipat ganda 2x lebih banyak! Dan Role VIP otomatis terpasang. Nikmati keistimewaanmu, bos! 💸*`
                 )
                 .setFooter({ text: 'Yuk dukung server kita tetap online dengan ketik !donate' })
                 .setTimestamp();
