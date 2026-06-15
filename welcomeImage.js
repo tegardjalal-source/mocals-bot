@@ -15,28 +15,30 @@ async function createCustomImage(type, member, bgUrl) {
     const canvas = createCanvas(700, 250);
     const ctx = canvas.getContext('2d');
 
-    // 1. Background
+    // 1. Background Blur
     const finalBgUrl = bgUrl || 'https://i.postimg.cc/0j2x1X9Z/bg.png';
     try {
         const response = await axios.get(finalBgUrl, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Mozilla/5.0' } });
         const background = await loadImage(response.data); 
+        
+        ctx.filter = 'blur(5px)'; // Efek blur background
         ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+        ctx.filter = 'none'; // Matikan filter untuk elemen lain
     } catch (err) {
-        ctx.fillStyle = '#000000'; // Background hitam ala Koya
+        ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // 2. Avatar Bulat di TENGAH (Ala Koya)
+    // 2. Avatar Bulat di TENGAH
     try {
         const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 256 });
         const avatarRes = await axios.get(avatarUrl, { responseType: 'arraybuffer' });
         const avatar = await loadImage(avatarRes.data);
         
         const centerX = canvas.width / 2;
-        const centerY = 100; // Agak ke atas
-        const radius = 65;
+        const centerY = 90;
+        const radius = 60;
 
-        // Border putih tipis (Opsional, biar makin mirip)
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 5;
         ctx.beginPath();
@@ -51,18 +53,22 @@ async function createCustomImage(type, member, bgUrl) {
         ctx.restore();
     } catch (err) {}
 
-    // 3. Teks di BAWAH avatar
-    ctx.fillStyle = '#ffffff'; 
+    // 3. Teks Hitam dengan Stroke Putih
     ctx.textAlign = 'center';  
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 10;
+    ctx.strokeStyle = '#ffffff'; // Warna stroke putih
+    ctx.lineWidth = 6;           // Ketebalan stroke
+    ctx.fillStyle = '#000000';   // Warna teks hitam
     
     ctx.font = 'bold 45px Montserrat';
-    ctx.fillText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 195);
+    // Menulis welcome/goodbye
+    ctx.strokeText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 185);
+    ctx.fillText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 185);
     
     ctx.font = 'bold 35px Montserrat';
     const username = member.user ? member.user.username : 'Unknown';
-    ctx.fillText(username.toUpperCase(), canvas.width / 2, 235);
+    // Menulis username
+    ctx.strokeText(username.toUpperCase(), canvas.width / 2, 225);
+    ctx.fillText(username.toUpperCase(), canvas.width / 2, 225);
 
     return canvas.encodeSync('png');
 }
