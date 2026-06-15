@@ -6,7 +6,6 @@ const { ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js')
 async function handleDonationCommands(message, command, args, globalDbCache) {
     if (!globalDbCache.donationConfig) globalDbCache.donationConfig = { logChannelId: null };
 
-    // Set channel log donasi
     if (command === 'donationlogset') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('✖️ Admin Only.');
         const targetChannel = message.mentions.channels.first();
@@ -17,19 +16,34 @@ async function handleDonationCommands(message, command, args, globalDbCache) {
 }
 
 /**
- * LOGIKA WEBHOOK: Cuma kirim notif, tidak ada auto-role
+ * LOGIKA WEBHOOK: FIXED MAPPING DATA
  */
 async function handleSaweriaWebhook(client, donationData, globalDbCache, saveData) {
     try {
-        const { name, amount, msg } = donationData;
+        // PERBAIKAN: Mapping field yang benar dari JSON Saweria
+        const name = donationData.donator_name || "Anonim";
+        const amount = donationData.amount_raw || 0;
+        const msg = donationData.message || "-";
+        
+        console.log(`[Donation] Menerima donasi dari ${name} sebesar ${amount}`);
+
         const config = globalDbCache.donationConfig || {};
         
-        // Ambil channel log
+        // Ambil guild dan channel
         const GUILD_ID = '746583847734345741';
         const guild = client.guilds.cache.get(GUILD_ID);
-        const logChannel = guild?.channels.cache.get(config.logChannelId);
+        
+        if (!guild) {
+            console.error('❌ [Error] Guild tidak ditemukan oleh bot!');
+            return;
+        }
 
-        if (!logChannel) return console.log('⚠️ Channel log belum di-set!');
+        const logChannel = guild.channels.cache.get(config.logChannelId);
+
+        if (!logChannel) {
+            console.error('⚠️ Channel log belum di-set!');
+            return;
+        }
 
         const embed = new EmbedBuilder()
             .setColor('#f3a41d')
@@ -37,13 +51,13 @@ async function handleSaweriaWebhook(client, donationData, globalDbCache, saveDat
             .addFields(
                 { name: '👤 Donatur', value: `\`${name}\``, inline: true },
                 { name: '💰 Nominal', value: `\`Rp ${amount.toLocaleString('id-ID')}\``, inline: true },
-                { name: '💬 Pesan', value: `*${msg || '-'}*`, inline: false }
+                { name: '💬 Pesan', value: `*${msg}*`, inline: false }
             )
             .setFooter({ text: 'Admin, jangan lupa kasih role donatur secara manual ya! ✨' })
             .setTimestamp();
 
         await logChannel.send({ content: "🎉 **Terima kasih atas dukungannya!**", embeds: [embed] });
-        console.log(`✅ [Saweria] Notifikasi dari ${name} sukses terkirim.`);
+        console.log(`✅ [Saweria] Notifikasi dari ${name} sukses terkirim ke Discord.`);
 
     } catch (error) {
         console.error('❌ [Error Webhook]:', error.message);
