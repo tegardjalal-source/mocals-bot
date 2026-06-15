@@ -1,26 +1,21 @@
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
-// Tambahkan parameter bgUrl
 async function createCustomImage(type, member, bgUrl) {
     const canvas = createCanvas(700, 250);
     const ctx = canvas.getContext('2d');
 
-    // Background default jika server belum nge-set custom background
     const defaultBg = 'https://i.imgur.com/gY5G5vD.png'; 
     const finalBgUrl = bgUrl || defaultBg;
 
     try {
-        // Coba load background custom/default
         const background = await loadImage(finalBgUrl); 
         ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
     } catch (err) {
-        // Kalau URL dari user rusak, kasih warna solid abu-abu gelap biar bot ga crash
         ctx.fillStyle = '#2f3136';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        console.error(`⚠️ Gagal meload gambar welcome untuk ${member.user.username}`);
+        console.error(`⚠️ Gagal meload background.`);
     }
 
-    // Styling Teks
     ctx.fillStyle = '#ffffff'; 
     ctx.textAlign = 'center';  
     
@@ -28,9 +23,12 @@ async function createCustomImage(type, member, bgUrl) {
     ctx.fillText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 100);
     
     ctx.font = '30px sans-serif';
-    ctx.fillText(member.user.username, canvas.width / 2, 160);
+    // Jaga-jaga kalau member.user.username kosong
+    const username = member.user ? member.user.username : 'Unknown';
+    ctx.fillText(username, canvas.width / 2, 160);
 
-    return canvas.toBuffer();
+    // 👇 PERBAIKAN: @napi-rs/canvas menggunakan encodeSync('png') bukan toBuffer()
+    return canvas.encodeSync('png');
 }
 
 module.exports = { createCustomImage };
