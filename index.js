@@ -9,6 +9,9 @@ const { jalankanGacha } = require('./gachaEngine');
 const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); 
 const { handleDonationCommands, handleSaweriaWebhook } = require('./donation'); 
 
+// 👇 BARU: Memanggil fungsi pembuat gambar kustom
+const { createCustomImage } = require('./welcomeImage'); 
+
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
 const GUILD_ID = '746583847734345741';
@@ -145,7 +148,7 @@ async function updateBotStatus() {
         const totalHumans = members.filter(m => !m.user.bot).size;
         const offlineCount = totalHumans - onlineCount;
         
-        client.user.setActivity(`🍀 𝑶𝒏𝒍𝒊𝒏𝒆: ${onlineCount} | 🍁 𝑶𝒇𝒇𝒍𝒊𝒏𝒆: ${offlineCount}`, { type: ActivityType.Custom });
+        client.user.setActivity(`🍀 𝑶𝒏𝒍𝒊𝒏𝒆: ${onlineCount} | 🍁 𝑶𝒇𝒇𝒍𝒊Offline: ${offlineCount}`, { type: ActivityType.Custom });
         console.log(`[Status Monitor] Status diperbarui. Online: ${onlineCount} | Offline: ${offlineCount}`);
     } catch (e) { console.error('Gagal update status:', e); }
 }
@@ -156,7 +159,7 @@ async function sendUpdateLog(guild, content) {
     const channel = guild.channels.cache.get(logChannelId) || await guild.channels.fetch(logChannelId).catch(() => null);
     if (channel) {
         channel.send({
-            embed: [new EmbedBuilder().setColor(0x00FF00).setTitle('🚀 Update Fitur Bot').setDescription(content).setTimestamp()]
+            embeds: [new EmbedBuilder().setColor(0x00FF00).setTitle('🚀 Update Fitur Bot').setDescription(content).setTimestamp()]
         });
     }
 }
@@ -431,7 +434,9 @@ client.on('messageCreate', async (message) => {
                 { name: '🔮 Gacha Multi-Luck & Album Kartu', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!gachainfo`, `!collection`, `!charinfo`, `!topcollector`', inline: false },
                 { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Etalase toko.\n`!buycard [Kode]`, `!buybm [Kode]`', inline: false },
                 { name: '📺 Pemantau YouTube Live', value: '`!addchannel`, `!removechannel`, `!listchannels`', inline: false },
-                { name: '💳 Sistem Donasi VIP', value: '`!donate` - Info donasi Saweria.\n`!checkvip` - Cek status masa aktif VIP milikmu.', inline: false }
+                { name: '💳 Sistem Donasi VIP', value: '`!donate` - Info donasi Saweria.\n`!checkvip` - Cek status masa aktif VIP milikmu.', inline: false },
+                // 👇 BARU: Tambahan panduan command Welcome & Leave BG di Help
+                { name: '🎨 Kustomisasi Welcome/Leave', value: '`!setwelcomebg [URL_Gambar]`, `!setleavebg [URL_Gambar]` (Admin Only)', inline: false }
             );
 
         if (message.member.permissions.has('Administrator')) {
@@ -1134,6 +1139,22 @@ client.on('messageCreate', async (message) => {
         return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
     }
 
+    // 👇 BARU: Command Set Welcome Background
+    if (command === 'setwelcomebg') {
+        if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Admin Only.');
+        const url = args[0];
+        
+        if (!url || !url.startsWith('http')) {
+            return message.reply('✖️ Format salah! Gunakan: `!setwelcomebg [Link_Gambar_URL]`\nContoh: `!setwelcomebg https://i.imgur.com/gambarmu.png`');
+        }
+
+        if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+        if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+        
+        globalDbCache.serverSettings[guildId].welcomeBgUrl = url;
+        return message.reply(`✅ Background Welcome berhasil diatur!`);
+    }
+
     if (command === 'setleave') {
         if (!message.member.permissions.has('Administrator')) {
             return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
@@ -1144,6 +1165,22 @@ client.on('messageCreate', async (message) => {
         if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
         globalDbCache.serverSettings[guildId].leaveId = ch.id;
         return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
+    }
+
+    // 👇 BARU: Command Set Leave Background
+    if (command === 'setleavebg') {
+        if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Admin Only.');
+        const url = args[0];
+        
+        if (!url || !url.startsWith('http')) {
+            return message.reply('✖️ Format salah! Gunakan: `!setleavebg [Link_Gambar_URL]`');
+        }
+
+        if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+        if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+        
+        globalDbCache.serverSettings[guildId].leaveBgUrl = url;
+        return message.reply(`✅ Background Leave/Goodbye berhasil diatur!`);
     }
     
     if (command === 'testwelcome') {
@@ -1494,7 +1531,7 @@ client.on('messageCreate', async (message) => {
 
     await handleDonationCommands(message, command, args, globalDbCache);
 
-    if (command === 'createjoin' || command === 'addvip' || command === 'donationlogset' || command === 'viproleset') {
+    if (command === 'createjoin' || command === 'addvip' || command === 'donationlogset' || command === 'viproleset' || command === 'setwelcomebg' || command === 'setleavebg') {
         try {
             await saveData(globalDbCache);
             console.log(`💾 [Auto-Save] Perubahan data krusial (${command}) berhasil dicadangkan ke JSONBin.`);
@@ -1504,23 +1541,53 @@ client.on('messageCreate', async (message) => {
     }
 });
 
+// 👇 BARU: Modifikasi Event Member Add untuk Canvas Custom BG
 client.on('guildMemberAdd', async (member) => { 
     const serverData = globalDbCache.serverSettings?.[member.guild.id];
     const welcomeId = serverData ? serverData.welcomeId : null;
+    const bgUrl = serverData ? serverData.welcomeBgUrl : null; // Ambil URL BG dari DB
 
     if (welcomeId) {
         const ch = member.guild.channels.cache.get(welcomeId) || await member.guild.channels.fetch(welcomeId).catch(() => null);
-        if (ch) ch.send(`Welcome imoet ${member}! ✨`);
+        if (ch) {
+            try {
+                // Buat canvas dan kirim sebagai attachment
+                const attachment = await createCustomImage('welcome', member, bgUrl);
+                ch.send({ 
+                    content: `Welcome imoet ${member}! ✨`, 
+                    files: [{ attachment, name: 'welcome.png' }] 
+                }).catch(console.error);
+            } catch (err) {
+                console.error("Gagal mengirim gambar welcome:", err);
+                // Fallback kalau error
+                ch.send(`Welcome imoet ${member}! ✨`); 
+            }
+        }
     }
 });
 
+// 👇 BARU: Modifikasi Event Member Remove untuk Canvas Custom BG
 client.on('guildMemberRemove', async (member) => { 
     const serverData = globalDbCache.serverSettings?.[member.guild.id];
     const leaveId = serverData ? serverData.leaveId : null;
+    const bgUrl = serverData ? serverData.leaveBgUrl : null; // Ambil URL BG dari DB
 
     if (leaveId) {
         const ch = member.guild.channels.cache.get(leaveId) || await member.guild.channels.fetch(leaveId).catch(() => null);
-        if (ch) ch.send(`Dadah ${member.user.tag}, sampai jumpa lagi! 😢`);
+        if (ch) {
+            try {
+                // Buat canvas dan kirim sebagai attachment
+                const attachment = await createCustomImage('goodbye', member, bgUrl);
+                ch.send({ 
+                    content: `Dadah ${member.user.tag}, sampai jumpa lagi! 😢`, 
+                    files: [{ attachment, name: 'goodbye.png' }] 
+                }).catch(console.error);
+            } catch (err) {
+                console.error("Gagal mengirim gambar goodbye:", err);
+                // Fallback kalau error
+                ch.send(`Dadah ${member.user.tag}, sampai jumpa lagi! 😢`); 
+            }
+        }
     }
 });
 
