@@ -3,11 +3,11 @@ const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ChannelType } = r
 const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
-const express = require('express'); // 🚀 Library baru untuk Web Server Webhook
-const bodyParser = require('body-parser'); // 🚀 Library baru untuk membaca paket data
+const express = require('express'); 
+const bodyParser = require('body-parser'); 
 const { jalankanGacha } = require('./gachaEngine');
 const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); 
-const { handleDonationCommands, handleSaweriaWebhook } = require('./donation'); // 💳 Menghubungkan fungsi donasi & webhook otomatis
+const { handleDonationCommands, handleSaweriaWebhook } = require('./donation'); 
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -156,7 +156,7 @@ async function sendUpdateLog(guild, content) {
     const channel = guild.channels.cache.get(logChannelId) || await guild.channels.fetch(logChannelId).catch(() => null);
     if (channel) {
         channel.send({
-            embeds: [new EmbedBuilder().setColor(0x00FF00).setTitle('🚀 Update Fitur Bot').setDescription(content).setTimestamp()]
+            embed: [new EmbedBuilder().setColor(0x00FF00).setTitle('🚀 Update Fitur Bot').setDescription(content).setTimestamp()]
         });
     }
 }
@@ -208,7 +208,6 @@ cron.schedule('0 0 * * *', async () => {
 
     for (const [guildId, guild] of client.guilds.cache) {
         try {
-            // 🚨 LOGIKA AUTO-REMOVE EXPIRATION VIP DONATUR (JAM 00:00)
             if (globalDbCache.vipUsers) {
                 const savedVipRoleId = globalDbCache.donationConfig?.vipRoleId;
                 
@@ -524,7 +523,7 @@ client.on('messageCreate', async (message) => {
 
             const charEmbed = new EmbedBuilder()
                 .setColor('#ff69b4')
-                .setTitle('👤 Profil Karakter: {name}{kanjiName}')
+                .setTitle(`👤 Profil Karakter: ${name}${kanjiName}`)
                 .setURL(url)
                 .setDescription(about)
                 .setThumbnail(imageUrl)
@@ -639,7 +638,7 @@ client.on('messageCreate', async (message) => {
             
             const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
             if (sudahPunya) {
-                sudayPunya.count = (sudahPunya.count || 1) + 1;
+                sudahPunya.count = (sudahPunya.count || 1) + 1;
             } else {
                 userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
             }
@@ -854,7 +853,8 @@ client.on('messageCreate', async (message) => {
             buyerWallet.cards.push({ id: itemGacha.id, name: itemGacha.name, rarity: itemGacha.rarity, count: 1 });
         }
 
-        globalDbCache.market.splice(marketIndex, 1);
+        const marketCache = globalDbCache.market;
+        marketCache.splice(marketIndex, 1);
 
         const buyEmbed = new EmbedBuilder()
             .setColor('#00ff55')
@@ -1490,13 +1490,10 @@ client.on('messageCreate', async (message) => {
         return message.reply(text);
     }
 
-    // 🎧 SUNTIKAN PERINTAH TEKS VOICE MASTER DINAMIS
     await handleVoiceMasterCommands(message, command, args, globalDbCache);
 
-    // 💳 SUNTIKAN PERINTAH TEKS SISTEM DONASI SAWERIA & VIP KONTROL
     await handleDonationCommands(message, command, args, globalDbCache);
 
-    // 💾 BACKUP OTOMATIS: Bila data krusial diubah admin, paksa simpan langsung ke JSONBin
     if (command === 'createjoin' || command === 'addvip' || command === 'donationlogset' || command === 'viproleset') {
         try {
             await saveData(globalDbCache);
@@ -1527,22 +1524,25 @@ client.on('guildMemberRemove', async (member) => {
     }
 });
 
-// ─── 🚀 WEB SERVER WEBHOOK SAWERIA INTEGRATION ───
+// ─── 🚀 WEB SERVER WEBHOOK SAWERIA INTEGRATION (OPTIMIZED) ───
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json()); 
 
 app.post('/saweria-webhook', async (req, res) => {
     const donationData = req.body;
 
-    if (donationData && donationData.amount) {
-        // Oper data donasi asli ke file donation.js untuk diproses otomatis oleh Mocals Chan
+    console.log("📥 [Webhook] Request masuk dari Saweria! Body:", JSON.stringify(donationData));
+
+    if (donationData && donationData.amount_raw) {
         await handleSaweriaWebhook(client, donationData, globalDbCache, saveData);
+    } else {
+        console.log("⚠️ [Webhook] Kiriman diabaikan karena field 'amount_raw' tidak valid.");
     }
 
     return res.status(200).send({ status: 'Success received by Mocals Chan' });
 });
 
-const PORT_WEB = 3000;
+const PORT_WEB = process.env.PORT || 3000;
 app.listen(PORT_WEB, '0.0.0.0', () => {
     console.log(`🚀 [Web Server Webhook] Mendengarkan notifikasi Saweria aktif di port :${PORT_WEB}`);
 });
