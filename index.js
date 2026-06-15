@@ -4,7 +4,8 @@ const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
 const { jalankanGacha } = require('./gachaEngine');
-const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); // 🎧 HUBUNGKAN FILE VOICE MASTER BARU
+const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); 
+const { handleDonationCommands } = require('./donation'); // 💳 HUBUNGKAN FILE DONASI BARU
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -46,7 +47,7 @@ const client = new Client({
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates // 🎧 WAJIB AKTIF: Agar bot bisa memantau keluar-masuk Voice Channel
+        GatewayIntentBits.GuildVoiceStates 
     ]
 });
 
@@ -61,7 +62,6 @@ const youtube = google.youtube({
     auth: process.env.YOUTUBE_API_KEY
 });
 
-// 📺 INTERPOLASI STRUKTUR BARU: Mengonversi ID Channel ke ID Playlist Uploads (Hemat Kuota)
 function convertChannelIdToUploadsPlaylistId(channelId) {
     if (channelId.startsWith('UC')) {
         return 'UU' + channelId.substring(2);
@@ -69,7 +69,6 @@ function convertChannelIdToUploadsPlaylistId(channelId) {
     return channelId;
 }
 
-// 📺 FUNGSI UTAMA: Pengecekan Berkala Live Stream Terjadwal (Sangat Hemat Kuota)
 async function checkYouTubeLiveStreams(discordClient) {
     console.log(`[${new Date().toLocaleString()}] Memulai pengecekan berkala live stream YouTube...`);
 
@@ -160,7 +159,6 @@ async function sendUpdateLog(guild, content) {
     }
 }
 
-// Event ready standar discord.js v14
 client.once('ready', async () => {
     try {
         console.log(`${client.user.tag} sudah siap beraksi!`);
@@ -177,14 +175,11 @@ client.once('ready', async () => {
             console.log("🔒 Cache status switch sistem keamanan server berhasil disinkronkan.");
         }
 
-        // 🎧 ACTIVE VOICE MASTER: Jalankan event pemicu dynamic room privat
         initVoiceMaster(client, globalDbCache);
         console.log("🎧 [Voice Master] Fitur Create to Join berhasil dimuat ke memori.");
 
-        // Jalankan pengecekan YouTube pertama kali saat bot menyala
         await checkYouTubeLiveStreams(client);
         
-        // Atur interval pengecekan berkala (Setiap 5 Menit = 300000 ms)
         setInterval(async () => {
             await checkYouTubeLiveStreams(client);
         }, 300000);
@@ -411,13 +406,14 @@ client.on('messageCreate', async (message) => {
                 { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`, `!sethbdrole @role` (Admin Only)', inline: false },
                 { name: '🔮 Gacha Multi-Luck & Album Kartu', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!gachainfo`, `!collection`, `!charinfo`, `!topcollector`', inline: false },
                 { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Etalase toko.\n`!buycard [Kode]`, `!buybm [Kode]`', inline: false },
-                { name: '📺 Pemantau YouTube Live', value: '`!addchannel`, `!removechannel`, `!listchannels`', inline: false }
+                { name: '📺 Pemantau YouTube Live', value: '`!addchannel`, `!removechannel`, `!listchannels`', inline: false },
+                { name: '💳 Sistem Donasi VIP', value: '`!donate` - Info donasi Saweria.\n`!checkvip` - Cek status masa aktif VIP milikmu.', inline: false }
             );
 
         if (message.member.permissions.has('Administrator')) {
             helpEmbed.addFields({
                 name: '🛠️ Perintah Khusus Administrator (Rahasia)',
-                value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`',
+                value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`, `!donationlogset #channel`, `!addvip @user [hari]`',
                 inline: false
             });
             helpEmbed.setColor('#ff0000'); 
@@ -618,7 +614,7 @@ client.on('messageCreate', async (message) => {
             
             const sudahPunya = userWallet.cards.find(c => c.id === hasil.id);
             if (sudahPunya) {
-                sudahPunya.count = (sudahPunya.count || 1) + 1;
+                sudayPunya.count = (sudahPunya.count || 1) + 1;
             } else {
                 userWallet.cards.push({ id: hasil.id, name: hasil.name, rarity: hasil.rarity, count: 1 });
             }
@@ -1472,9 +1468,17 @@ client.on('messageCreate', async (message) => {
     // 🎧 SUNTIKAN PERINTAH TEKS VOICE MASTER DINAMIS
     await handleVoiceMasterCommands(message, command, args, globalDbCache);
 
-    // 💾 BACKUP OTOMATIS: Bila data hub didaftarkan admin, paksa simpan langsung ke JSONBin
-    if (command === 'createjoin') {
-        await saveData(globalDbCache);
+    // 💳 SUNTIKAN PERINTAH TEKS SISTEM DONASI SAWERIA & VIP KONTROL
+    await handleDonationCommands(message, command, args, globalDbCache);
+
+    // 💾 BACKUP OTOMATIS: Bila data krusial diubah admin, paksa simpan langsung ke JSONBin
+    if (command === 'createjoin' || command === 'addvip' || command === 'donationlogset') {
+        try {
+            await saveData(globalDbCache);
+            console.log(`💾 [Auto-Save] Perubahan data krusial (${command}) berhasil dicadangkan ke JSONBin.`);
+        } catch (err) {
+            console.error(`❌ Gagal backup otomatis ke JSONBin:`, err.message);
+        }
     }
 });
 
