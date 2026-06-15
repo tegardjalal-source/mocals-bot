@@ -4,11 +4,11 @@ const axios = require('axios');
 let isFontLoaded = false;
 
 async function createCustomImage(type, member, bgUrl) {
-    // 1. Download font otomatis agar teks muncul di Railway
+    // Mengunduh font "Great Vibes" yang bergaya kaligrafi
     if (!isFontLoaded) {
         try {
-            const fontRes = await axios.get('https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Bold.ttf', { responseType: 'arraybuffer' });
-            GlobalFonts.register(fontRes.data, 'Roboto');
+            const fontRes = await axios.get('https://github.com/google/fonts/raw/main/ofl/greatvibes/GreatVibes-Regular.ttf', { responseType: 'arraybuffer' });
+            GlobalFonts.register(fontRes.data, 'GreatVibes');
             isFontLoaded = true;
         } catch (err) {
             console.error('⚠️ Gagal memuat font:', err.message);
@@ -28,26 +28,23 @@ async function createCustomImage(type, member, bgUrl) {
         const background = await loadImage(response.data); 
         ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
     } catch (err) {
-        console.error(`⚠️ Gagal meload background:`, err.message);
-        ctx.fillStyle = '#2f3136'; 
+        ctx.fillStyle = '#2f3136';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // Styling Teks & Efek Shadow agar tidak nyatu dengan background
+    // Styling Teks dengan Shadow
     ctx.fillStyle = '#ffffff'; 
     ctx.textAlign = 'center';  
-    ctx.shadowColor = 'black'; // Bayangan hitam
-    ctx.shadowBlur = 7;        // Kehalusan bayangan
-    ctx.lineWidth = 5;
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; 
+    ctx.shadowBlur = 10;
     
-    // Teks Utama
-    ctx.font = 'bold 50px Roboto';
-    ctx.fillText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 100);
+    // Gunakan font 'GreatVibes'
+    ctx.font = '70px GreatVibes';
+    ctx.fillText(type === 'welcome' ? 'Welcome' : 'Good Bye', canvas.width / 2, 100);
     
-    // Teks Username
-    ctx.font = 'bold 40px Roboto'; 
+    ctx.font = '60px GreatVibes';
     const username = member.user ? member.user.username : 'Unknown';
-    ctx.fillText(username, canvas.width / 2, 170); // Posisi sedikit diturunkan
+    ctx.fillText(username, canvas.width / 2, 180);
 
     return canvas.encodeSync('png');
 }
