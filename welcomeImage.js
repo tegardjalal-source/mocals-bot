@@ -1,41 +1,47 @@
-const { createCanvas, loadImage } = require('@napi-rs/canvas');
+const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const axios = require('axios');
 
+let isFontLoaded = false;
+
 async function createCustomImage(type, member, bgUrl) {
+    // 1. Trik Rahasia: Download font otomatis agar teks muncul di Railway
+    if (!isFontLoaded) {
+        try {
+            const fontRes = await axios.get('https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Bold.ttf', { responseType: 'arraybuffer' });
+            GlobalFonts.register(fontRes.data, 'Roboto');
+            isFontLoaded = true;
+        } catch (err) {
+            console.error('⚠️ Gagal memuat font:', err.message);
+        }
+    }
+
     const canvas = createCanvas(700, 250);
     const ctx = canvas.getContext('2d');
 
-    const defaultBg = 'https://i.imgur.com/gY5G5vD.png'; 
-    const finalBgUrl = bgUrl || defaultBg;
+    const finalBgUrl = bgUrl || 'https://i.postimg.cc/0j2x1X9Z/bg.png';
 
     try {
-        // Trik jitu: Download gambar pakai Axios dengan nyamar jadi browser manusia 
-        // Biar nggak diblokir sama sistem keamanan Discord / Imgur
         const response = await axios.get(finalBgUrl, { 
             responseType: 'arraybuffer',
-            headers: { 
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' 
-            }
+            headers: { 'User-Agent': 'Mozilla/5.0' }
         });
-        
-        // Ubah data hasil download jadi gambar canvas
         const background = await loadImage(response.data); 
         ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
     } catch (err) {
         console.error(`⚠️ Gagal meload background:`, err.message);
-        // Kalau link tetap mati, kasih warna abu-abu
-        ctx.fillStyle = '#2f3136';
+        ctx.fillStyle = '#2f3136'; // Warna abu-abu kalau link mati
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // Styling Teks (Welcome & Username)
+    // Styling Teks
     ctx.fillStyle = '#ffffff'; 
     ctx.textAlign = 'center';  
     
-    ctx.font = 'bold 50px sans-serif';
+    // 2. Gunakan font 'Roboto' yang sudah didownload bot
+    ctx.font = '50px Roboto';
     ctx.fillText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 100);
     
-    ctx.font = '30px sans-serif';
+    ctx.font = '30px Roboto';
     const username = member.user ? member.user.username : 'Unknown';
     ctx.fillText(username, canvas.width / 2, 160);
 
