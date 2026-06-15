@@ -1543,7 +1543,7 @@ app.post('/saweria-webhook', async (req, res) => {
 });
 
 const PORT_WEB = 3000;
-app.listen(PORT_WEB, () => {
+app.listen(PORT_WEB, '0.0.0.0', () => {
     console.log(`🚀 [Web Server Webhook] Mendengarkan notifikasi Saweria aktif di port :${PORT_WEB}`);
 });
 
