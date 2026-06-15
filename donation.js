@@ -1,18 +1,13 @@
 const { ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 /**
- * Logika Handler Perintah Donasi dan Sistem VIP
- * @param {import('discord.js').Message} message 
- * @param {string} command 
- * @param {string[]} args 
- * @param {Object} globalDbCache 
+ * Logika Handler Perintah Teks Donasi (Manual)
  */
 async function handleDonationCommands(message, command, args, globalDbCache) {
-    // Pastikan database struktur VIP dan config sudah ada di memori RAM
     if (!globalDbCache.vipUsers) globalDbCache.vipUsers = {};
     if (!globalDbCache.donationConfig) globalDbCache.donationConfig = { logChannelId: null, vipRoleId: null };
 
-    // ─── PERINTAH PUBLIC 1: !donate ───
+    // ─── PERINTAH PUBLIC: !donate ───
     if (command === 'donate') {
         const linkSaweria = "https://saweria.co/USERNAME_SAWERIA_KAMU"; // 🌟 GANTI DENGAN LINK SAWERIAMU!
 
@@ -21,16 +16,12 @@ async function handleDonationCommands(message, command, args, globalDbCache) {
             .setTitle('🌸 Dukung Mocals Chan Tetap Hidup! (Bayar Hostinger)')
             .setDescription(
                 `Halo **${message.author.username}**!\n\n` +
-                `Biar Mocals Chan bisa terus nemenin kalian mabar 24/7 tanpa pingsan, bot ini butuh biaya bulanan untuk sewa server di **Hostinger**. ` +
-                `Setiap rupiah donasi dari kalian sangat berarti bagi kelangsungan hidup bot ini! 🥺\n\n` +
+                `Biar Mocals Chan bisa terus nemenin kalian mabar 24/7, bot ini butuh biaya sewa server di **Hostinger**. 🥺\n\n` +
                 `👉 **Link Saweria (QRIS, Dana, OVO, GoPay, dll):**\n` +
                 `[**Klik Disini Untuk Donasi via Saweria**](${linkSaweria})\n\n` +
-                `🎁 **Benefit Menjadi Donatur VIP Bot:**\n` +
-                `🥇 Role Khusus Donatur Eksklusif di Server\n` +
-                `💰 **Multiplier 2x Lipat** koin setiap kali mengetik \`!work\` atau \`!daily\`\n` +
-                `🍀 Keberuntungan tambahan (Buff Luck) saat melakukan \`!gacha\`\n\n` +
-                `📝 **Cara Klaim:**\n` +
-                `Setelah transfer di Saweria, silakan kirim screenshot bukti transfernya ke **Admin/Owner Server** untuk diaktifkan status VIP-mu!`
+                `💡 **PENTING UNTUK AUTO-VIP:**\n` +
+                `Saat mengisi pesan di Saweria, **WAJIB sertakan ID Discord kamu** agar bot bisa otomatis memberikan pangkat VIP dan mendeteksi akunmu!\n` +
+                `*Contoh Pesan: "Sewa hosting ya min! ID: 29384729384729384"*`
             )
             .setFooter({ text: 'Terima kasih banyak atas dukungan kalian! ❤️' })
             .setTimestamp();
@@ -38,132 +29,115 @@ async function handleDonationCommands(message, command, args, globalDbCache) {
         return message.reply({ embeds: [donateEmbed] });
     }
 
-    // ─── PERINTAH ADMIN 1: !donationlogset #channel ───
+    // ─── PERINTAH ADMIN: !donationlogset #channel ───
     if (command === 'donationlogset') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('✖️ Perintah rahasia! Hanya bisa digunakan oleh **Administrator**.');
+            return message.reply('✖️ Khusus Administrator.');
         }
-
         const targetChannel = message.mentions.channels.first();
         if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
-            return message.reply('✖️ Format salah! Silakan tag Text Channel tujuannya.\nContoh: `!donationlogset #💸-donation-log`');
+            return message.reply('✖️ Format salah! Tag Text Channel tujuannya.');
         }
-
         globalDbCache.donationConfig.logChannelId = targetChannel.id;
-        return message.reply(`✅ **Sukses!** Channel <#${targetChannel.id}> sekarang resmi menjadi tempat pengumuman donasi Mocals Chan.`);
+        return message.reply(`✅ **Sukses!** Channel <#${targetChannel.id}> resmi jadi tempat log Saweria.`);
     }
 
-    // ─── PERINTAH ADMIN 2: !viproleset @role ───
+    // ─── PERINTAH ADMIN: !viproleset @role ───
     if (command === 'viproleset') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('✖️ Perintah rahasia! Hanya bisa digunakan oleh **Administrator**.');
-        }
-
+        if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Admin Only.');
         const targetRole = message.mentions.roles.first();
-        if (!targetRole) {
-            return message.reply('✖️ Format salah! Silakan tag Role yang ingin dijadikan hadiah VIP.\nContoh: `!viproleset @VIP Donator`');
-        }
-
+        if (!targetRole) return message.reply('✖️ Tag rolenya!');
         globalDbCache.donationConfig.vipRoleId = targetRole.id;
-        return message.reply(`✅ **Sukses!** Role **${targetRole.name}** sekarang resmi diatur sebagai Role otomatis untuk donatur VIP.`);
-    }
-
-    // ─── PERINTAH ADMIN 3: !addvip @user [jumlah_hari] ───
-    if (command === 'addvip') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('✖️ Perintah rahasia! Hanya bisa digunakan oleh **Administrator**.');
-        }
-
-        const targetMember = message.mentions.members.first();
-        const jumlahHari = parseInt(args[1]);
-
-        if (!targetMember || isNaN(jumlahHari) || jumlahHari <= 0) {
-            return message.reply('✖️ Format salah! Gunakan perintah ini:\nContoh: `!addvip @NamaUser 30`');
-        }
-
-        const waktuSekarang = Date.now();
-        const durasiMilidetik = jumlahHari * 24 * 60 * 60 * 1000;
-        let waktuSelesaiBaru = waktuSekarang + durasiMilidetik;
-
-        if (globalDbCache.vipUsers[targetMember.id] && globalDbCache.vipUsers[targetMember.id].expireAt > waktuSekarang) {
-            waktuSelesaiBaru = globalDbCache.vipUsers[targetMember.id].expireAt + durasiMilidetik;
-        }
-
-        globalDbCache.vipUsers[targetMember.id] = {
-            username: targetMember.user.username,
-            expireAt: waktuSelesaiBaru
-        };
-
-        const tanggalSelesai = new Date(waktuSelesaiBaru).toLocaleDateString('id-ID', {
-            year: 'numeric', month: 'long', day: 'numeric'
-        });
-
-        // 🌟 LOGIKA BARU 1: OTOMATIS BERIKAN ROLE VIP SECARA FISIK DI DISCORD
-        const savedRoleId = globalDbCache.donationConfig.vipRoleId;
-        if (savedRoleId) {
-            await targetMember.roles.add(savedRoleId).catch(err => {
-                console.error(`❌ Gagal memberikan role VIP ke ${targetMember.user.username}:`, err.message);
-            });
-        }
-
-        // AMBIL ID CHANNEL LOG DARI DATABASE YANG SUDAH DI-SET ADMIN
-        const savedLogChannelId = globalDbCache.donationConfig.logChannelId;
-        const logChannel = message.guild.channels.cache.get(savedLogChannelId);
-        
-        if (logChannel) {
-            const announceEmbed = new EmbedBuilder()
-                .setColor('#ffbb00')
-                .setTitle('🎉 HERO SERVER DETECTED! NEW DONATION RECEIVED 🎉')
-                .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true }))
-                .setDescription(
-                    `✨ **Terima Kasih Banyak Atas Dukungannya!** ✨\n\n` +
-                    `Pahlawan kita <@${targetMember.id}> baru saja melakukan donasi untuk kelangsungan server & pemeliharaan Mocals Chan di Hostinger! ❤️\n\n` +
-                    `👑 **Reward Activated:**\n` +
-                    `• Status: **VIP Donatur active!**\n` +
-                    `• Durasi: **${jumlahHari} Hari**\n` +
-                    `• Berlaku Sampai: **${tanggalSelesai}**\n\n` +
-                    `*Koin harian & kerja milik <@${targetMember.id}> sekarang berlipat ganda 2x lebih banyak! Dan Role VIP otomatis terpasang. Nikmati keistimewaanmu, bos! 💸*`
-                )
-                .setFooter({ text: 'Yuk dukung server kita tetap online dengan ketik !donate' })
-                .setTimestamp();
-
-            await logChannel.send({ content: `🔔 **Pemberitahuan Donasi:** Terima kasih <@${targetMember.id}>!`, embeds: [announceEmbed] });
-        } else {
-            console.log(`⚠️ [Warning Donation Log] Belum ada channel log donasi yang di-set, atau channel sudah dihapus.`);
-        }
-
-        return message.reply(`✅ **Sukses!** Status VIP <@${targetMember.id}> berhasil diaktifkan selama **${jumlahHari} hari**.`);
-    }
-
-    // ─── PERINTAH PUBLIC 2: !checkvip ───
-    if (command === 'checkvip') {
-        const vipData = globalDbCache.vipUsers[message.author.id];
-        const waktuSekarang = Date.now();
-
-        if (!vipData || vipData.expireAt < waktuSekarang) {
-            return message.reply('❌ Kamu saat ini berstatus sebagai **Member Biasa**. Yuk dukung bot lewat perintah `!donate` untuk mendapatkan status VIP! ✨');
-        }
-
-        const sisaMilidetik = vipData.expireAt - waktuSekarang;
-        const sisaHari = Math.ceil(sisaMilidetik / (1000 * 60 * 60 * 24));
-        
-        const tanggalSelesai = new Date(vipData.expireAt).toLocaleDateString('id-ID', {
-            year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
-
-        return message.reply(`👑 **Status VIP Kamu Aktif!**\nSisa masa aktif VIP kamu adalah **${sisaHari} Hari lagi** (Berakhir pada: ${tanggalSelesai} WIB). Terima kasih sudah mendukung server ini!`);
+        return message.reply(`✅ **Sukses!** Role otomatis VIP diatur ke **${targetRole.name}**.`);
     }
 }
 
 /**
- * Helper Fungsi: Mengecek apakah seorang user berstatus VIP Aktif
- * @param {string} userId 
- * @param {Object} globalDbCache 
- * @returns {boolean}
+ * 🚀 LOGIKA CORE WEBHOOK SAWERIA (OTOMATIS TANPA COMMAND)
+ * Fungsi ini dipicu otomatis oleh Express ketika Saweria mengirim data donasi asli.
  */
-function isUserVip(userId, globalDbCache) {
-    if (!globalDbCache.vipUsers || !globalDbCache.vipUsers[userId]) return false;
-    return globalDbCache.vipUsers[userId].expireAt > Date.now();
+async function handleSaweriaWebhook(client, donationData, globalDbCache, saveData) {
+    try {
+        const { msg, name, amount } = donationData;
+        console.log(`[Saweria] Menerima data donasi dari ${name} sebesar Rp ${amount}`);
+
+        if (!globalDbCache.vipUsers) globalDbCache.vipUsers = {};
+        const config = globalDbCache.donationConfig || {};
+
+        // 1. Ekstrak ID Discord dari kolom pesan menggunakan Regex angka (17-19 digit)
+        const idMatch = msg.match(/\d{17,19}/);
+        let targetMember = null;
+        let userId = null;
+
+        // Ambil objek Guild/Server utama bot kamu
+        const GUILD_ID = '746583847734345741'; // ID Server kamu
+        const guild = client.guilds.cache.get(GUILD_ID);
+
+        if (guild && idMatch) {
+            userId = idMatch[0];
+            targetMember = await guild.members.fetch(userId).catch(() => null);
+        }
+
+        // 2. Hitung jumlah hari VIP berdasarkan nominal uang (Contoh: Rp 1.000 = 1 Hari VIP)
+        const jumlahHari = Math.floor(amount / 1000);
+
+        let rewardStatusText = "Status VIP gagal diaktifkan otomatis karena ID Discord tidak valid/tidak ditemukan di kolom pesan Saweria. Silakan hubungi admin untuk klaim manual!";
+        const waktuSekarang = Date.now();
+
+        // 3. Jika ID Discord donatur valid dan mereka ada di server
+        if (targetMember && userId && jumlahHari > 0) {
+            const durasiMilidetik = jumlahHari * 24 * 60 * 60 * 1000;
+            let waktuSelesaiBaru = waktuSekarang + durasiMilidetik;
+
+            if (globalDbCache.vipUsers[userId] && globalDbCache.vipUsers[userId].expireAt > waktuSekarang) {
+                waktuSelesaiBaru = globalDbCache.vipUsers[userId].expireAt + durasiMilidetik;
+            }
+
+            // Simpan status ke RAM database
+            globalDbCache.vipUsers[userId] = {
+                username: targetMember.user.username,
+                expireAt: waktuSelesaiBaru
+            };
+
+            const tanggalSelesai = new Date(waktuSelesaiBaru).toLocaleDateString('id-ID', {
+                year: 'numeric', month: 'long', day: 'numeric'
+            });
+
+            // Berikan Role VIP fisik di Discord secara otomatis
+            if (config.vipRoleId) {
+                await targetMember.roles.add(config.vipRoleId).catch(console.error);
+            }
+
+            rewardStatusText = `👑 **Reward VIP Otomatis Aktif:**\n• Akun: <@${userId}>\n• Durasi Tambahan: **${jumlahHari} Hari**\n• Berlaku Sampai: **${tanggalSelesai}**\n\n*Koin harian, kerja, & role VIP kamu sudah otomatis diperbarui oleh Mocals Chan!*`;
+            
+            // Simpan perubahan ke JSONBin cloud secara instan
+            await saveData(globalDbCache);
+        }
+
+        // 4. KIRIM ANNOUNCEMENT REALTIME KE CHANNEL LOG DONASI
+        const logChannel = guild?.channels.cache.get(config.logChannelId);
+        if (logChannel) {
+            const saweriaEmbed = new EmbedBuilder()
+                .setColor('#f3a41d') // Warna khas Saweria kuning jingga
+                .setTitle('🔔 NOTIFIKASI REALTIME SAWERIA DETECTED!')
+                .setThumbnail(targetMember ? targetMember.user.displayAvatarURL({ dynamic: true }) : 'https://i.imgur.com/8N7V0w9.png')
+                .setDescription(
+                    `💸 **Donasi Baru Masuk Melalui Saweria!** 💸\n\n` +
+                    `• **Dari**: \`${name}\`\n` +
+                    `• **Jumlah**: \`Rp ${amount.toLocaleString('id-ID')}\`\n` +
+                    `• **Pesan**: *"${msg}"*\n\n` +
+                    `───────────────────\n` +
+                    `${rewardStatusText}`
+                )
+                .setFooter({ text: 'Yuk bantu donasi sewa Hostinger dengan mengetik !donate' })
+                .setTimestamp();
+
+            await logChannel.send({ content: targetMember ? `🎉 Terima kasih banyak <@${userId}>!` : `🎉 Terima kasih banyak \`${name}\`!`, embeds: [saweriaEmbed] });
+        }
+
+    } catch (error) {
+        console.error('❌ [Error Webhook Saweria Processing]:', error.message);
+    }
 }
 
-module.exports = { handleDonationCommands, isUserVip };
+module.exports = { handleDonationCommands, handleSaweriaWebhook };
