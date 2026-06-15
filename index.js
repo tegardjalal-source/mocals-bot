@@ -4,6 +4,7 @@ const axios = require('axios');
 const cron = require('node-cron');
 const { google } = require('googleapis');
 const { jalankanGacha } = require('./gachaEngine');
+const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); // 🎧 HUBUNGKAN FILE VOICE MASTER BARU
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -44,7 +45,8 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates // 🎧 WAJIB AKTIF: Agar bot bisa memantau keluar-masuk Voice Channel
     ]
 });
 
@@ -175,11 +177,14 @@ client.once('ready', async () => {
             console.log("🔒 Cache status switch sistem keamanan server berhasil disinkronkan.");
         }
 
+        // 🎧 ACTIVE VOICE MASTER: Jalankan event pemicu dynamic room privat
+        initVoiceMaster(client, globalDbCache);
+        console.log("🎧 [Voice Master] Fitur Create to Join berhasil dimuat ke memori.");
+
         // Jalankan pengecekan YouTube pertama kali saat bot menyala
         await checkYouTubeLiveStreams(client);
         
         // Atur interval pengecekan berkala (Setiap 5 Menit = 300000 ms)
-        // Konsumsi kuota harian dijamin sangat kecil dan aman 24 jam penuh
         setInterval(async () => {
             await checkYouTubeLiveStreams(client);
         }, 300000);
@@ -1082,7 +1087,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'testyt') {
         if (!message.member.permissions.has('Administrator')) {
-            return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+            return message.reply('✖️ Perintah ini rahasia! Hanya bisa used oleh **Administrator** server.');
         }
         message.reply('🔄 Memulai simulasi pengecekan live stream YouTube manual...');
         await checkYouTubeLiveStreams(client);
@@ -1462,6 +1467,14 @@ client.on('messageCreate', async (message) => {
             text += `${i+1}. <@${sorted[i][0]}>: **$${(sorted[i][1].money || 0).toLocaleString('id-ID')}**\n`;
         }
         return message.reply(text);
+    }
+
+    // 🎧 SUNTIKAN PERINTAH TEKS VOICE MASTER DINAMIS
+    await handleVoiceMasterCommands(message, command, args, globalDbCache);
+
+    // 💾 BACKUP OTOMATIS: Bila data hub didaftarkan admin, paksa simpan langsung ke JSONBin
+    if (command === 'createjoin') {
+        await saveData(globalDbCache);
     }
 });
 
