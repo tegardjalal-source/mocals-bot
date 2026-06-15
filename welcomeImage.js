@@ -1,4 +1,4 @@
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
 // Tambahkan parameter bgUrl
 async function createCustomImage(type, member, bgUrl) {
