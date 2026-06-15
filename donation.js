@@ -20,12 +20,15 @@ async function handleDonationCommands(message, command, args, globalDbCache) {
  */
 async function handleSaweriaWebhook(client, donationData, globalDbCache, saveData) {
     try {
-        // PERBAIKAN: Mapping field yang benar dari JSON Saweria
+        // Mapping field yang benar dari JSON Saweria
         const name = donationData.donator_name || "Anonim";
         const amount = donationData.amount_raw || 0;
         const msg = donationData.message || "-";
         
-        console.log(`[Donation] Menerima donasi dari ${name} sebesar ${amount}`);
+        // PENGAMAN: Pastikan amount berupa angka agar toLocaleString() tidak crash
+        const parsedAmount = parseInt(amount) || 0;
+        
+        console.log(`[Donation] Menerima donasi dari ${name} sebesar Rp ${parsedAmount}`);
 
         const config = globalDbCache.donationConfig || {};
         
@@ -41,7 +44,7 @@ async function handleSaweriaWebhook(client, donationData, globalDbCache, saveDat
         const logChannel = guild.channels.cache.get(config.logChannelId);
 
         if (!logChannel) {
-            console.error('⚠️ Channel log belum di-set!');
+            console.error('⚠️ [Error] Channel log donasi belum di-set di server! Gunakan perintah !donationlogset');
             return;
         }
 
@@ -50,7 +53,7 @@ async function handleSaweriaWebhook(client, donationData, globalDbCache, saveDat
             .setTitle('💸 DONASI BARU MASUK!')
             .addFields(
                 { name: '👤 Donatur', value: `\`${name}\``, inline: true },
-                { name: '💰 Nominal', value: `\`Rp ${amount.toLocaleString('id-ID')}\``, inline: true },
+                { name: '💰 Nominal', value: `\`Rp ${parsedAmount.toLocaleString('id-ID')}\``, inline: true },
                 { name: '💬 Pesan', value: `*${msg}*`, inline: false }
             )
             .setFooter({ text: 'Admin, jangan lupa kasih role donatur secara manual ya! ✨' })
