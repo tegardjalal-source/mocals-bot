@@ -1,17 +1,7 @@
-const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const axios = require('axios');
 
-let isFontLoaded = false;
-
 async function createCustomImage(type, member, bgUrl) {
-    if (!isFontLoaded) {
-        try {
-            const fontRes = await axios.get('https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Bold.ttf', { responseType: 'arraybuffer' });
-            GlobalFonts.register(fontRes.data, 'Montserrat');
-            isFontLoaded = true;
-        } catch (err) { console.error(err); }
-    }
-
     const canvas = createCanvas(700, 250);
     const ctx = canvas.getContext('2d');
 
@@ -20,55 +10,49 @@ async function createCustomImage(type, member, bgUrl) {
     try {
         const response = await axios.get(finalBgUrl, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Mozilla/5.0' } });
         const background = await loadImage(response.data); 
-        
-        ctx.filter = 'blur(5px)'; // Efek blur background
+        ctx.filter = 'blur(5px)'; 
         ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
-        ctx.filter = 'none'; // Matikan filter untuk elemen lain
+        ctx.filter = 'none';
     } catch (err) {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // 2. Avatar Bulat di TENGAH
+    // 2. Avatar
     try {
         const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 256 });
         const avatarRes = await axios.get(avatarUrl, { responseType: 'arraybuffer' });
         const avatar = await loadImage(avatarRes.data);
         
-        const centerX = canvas.width / 2;
-        const centerY = 90;
-        const radius = 60;
-
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 5;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.arc(350, 90, 60, 0, Math.PI * 2);
         ctx.stroke();
-
         ctx.save();
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.arc(350, 90, 60, 0, Math.PI * 2);
         ctx.clip();
-        ctx.drawImage(avatar, centerX - radius, centerY - radius, radius * 2, radius * 2);
+        ctx.drawImage(avatar, 290, 30, 120, 120);
         ctx.restore();
     } catch (err) {}
 
-    // 3. Teks Hitam dengan Stroke Putih
+    // 3. Teks Hitam dengan Stroke Putih (Font Standar Sans-Serif)
     ctx.textAlign = 'center';  
-    ctx.strokeStyle = '#ffffff'; // Warna stroke putih
-    ctx.lineWidth = 6;           // Ketebalan stroke
-    ctx.fillStyle = '#000000';   // Warna teks hitam
+    ctx.strokeStyle = '#ffffff'; 
+    ctx.lineWidth = 8;           // Stroke dipertebal
+    ctx.fillStyle = '#000000';   
     
-    ctx.font = 'bold 45px Montserrat';
-    // Menulis welcome/goodbye
-    ctx.strokeText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 185);
-    ctx.fillText(type === 'welcome' ? 'WELCOME' : 'GOOD BYE', canvas.width / 2, 185);
+    // Pakai font 'sans-serif' yang pasti ada di server
+    ctx.font = 'bold 50px sans-serif';
+    const title = type === 'welcome' ? 'WELCOME' : 'GOOD BYE';
+    ctx.strokeText(title, 350, 185);
+    ctx.fillText(title, 350, 185);
     
-    ctx.font = 'bold 35px Montserrat';
-    const username = member.user ? member.user.username : 'Unknown';
-    // Menulis username
-    ctx.strokeText(username.toUpperCase(), canvas.width / 2, 225);
-    ctx.fillText(username.toUpperCase(), canvas.width / 2, 225);
+    ctx.font = 'bold 40px sans-serif';
+    const username = (member.user ? member.user.username : 'Unknown').toUpperCase();
+    ctx.strokeText(username, 350, 230);
+    ctx.fillText(username, 350, 230);
 
     return canvas.encodeSync('png');
 }
