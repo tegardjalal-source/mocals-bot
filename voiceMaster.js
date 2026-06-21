@@ -1,8 +1,5 @@
 const { ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
-// Set memori internal untuk mencatat ID channel privat sementara buatan bot
-const dynamicVoiceChannels = new Set();
-
 /**
  * Inisialisasi Fitur Voice Master Dinamis
  * @param {import('discord.js').Client} client 
@@ -15,17 +12,20 @@ function initVoiceMaster(client, globalDbCache) {
         const member = newState.member;
         if (!member || member.user.bot) return;
 
-        // Ambil daftar Voice Hub yang didaftarkan Admin dari database RAM
+        // Ambil daftar Voice Hub dari database RAM
         const registeredHubs = globalDbCache.voiceHubs || [];
+        
+        // [BUG FIX 1]: Siapkan array database untuk mengingat room (Anti-Amnesia saat bot restart)
+        if (!globalDbCache.dynamicVoices) globalDbCache.dynamicVoices = [];
 
-        // JIKA USER MASUK KE SALAH SATU VOICE HUB YANG DIPANTAU
+        // ─── 1. JIKA USER MASUK KE SALAH SATU VOICE HUB ───
         if (newState.channelId && registeredHubs.includes(newState.channelId)) {
             try {
-                // 1. Buat Voice Channel baru secara otomatis
+                // Buat Voice Channel baru secara otomatis
                 const roomBaru = await newState.guild.channels.create({
                     name: `🔊 Room ${member.user.username}`,
                     type: ChannelType.GuildVoice,
-                    parent: newState.channel.parentId, // Otomatis menyamakan kategori dengan Hub-nya
+                    parent: newState.channel.parentId, // Samakan kategori dengan Hub
                     permissionOverwrites: [
                         {
                             id: member.id,
@@ -34,46 +34,66 @@ function initVoiceMaster(client, globalDbCache) {
                                 PermissionFlagsBits.MoveMembers, 
                                 PermissionFlagsBits.MuteMembers, 
                                 PermissionFlagsBits.DeafenMembers
-                            ], // Berikan hak Owner Room privat
+                            ], // Hak Owner
                         },
+                        {
+                            // Pastikan bot tetap punya hak akses mengelola room ini
+                            id: client.user.id,
+                            allow: [
+                                PermissionFlagsBits.ManageChannels, 
+                                PermissionFlagsBits.MoveMembers, 
+                                PermissionFlagsBits.Connect, 
+                                PermissionFlagsBits.ViewChannel
+                            ]
+                        }
                     ],
                 });
 
-                // 2. Catat ID channel privat ke memori bot
-                dynamicVoiceChannels.add(roomBaru.id);
+                // [BUG FIX 2]: Anti "Hit-and-Run" Ghost Channel
+                // Cek apakah user keburu keluar voice/pindah sebelum room selesai dibuat
+                if (!member.voice.channel || member.voice.channelId !== newState.channelId) {
+                    await roomBaru.delete().catch(() => null);
+                    return;
+                }
 
-                // 3. Pindahkan user ke room privat barunya
+                // Catat ID channel privat ke Database Bot
+                globalDbCache.dynamicVoices.push(roomBaru.id);
+
+                // Pindahkan user ke room privat barunya
                 await member.voice.setChannel(roomBaru);
                 console.log(`👤 [Voice Master] Room privat dinamis berhasil dibuat untuk ${member.user.username}`);
 
-                // 4. KIRIM EMBED SAPAAN & INSTRUKSI COMMAND
+                // Kirim Embed Sapaan
                 const sapaanEmbed = new EmbedBuilder()
                     .setColor('#00ffbb')
                     .setTitle(`👑 Selamat Datang di Room Privat Milikmu!`)
                     .setDescription(
                         `Halo ${member}! Room privat ini dikontrol penuh olehmu.\n\n` +
                         `**Command Khusus Owner Room:**\n` +
-                        `🔹 \`!limitvoice [angka]\` - Mengatur batas maksimal slot member (0-99).\n` +
+                        `🔹 \`!limitvoice [angka]\` - Mengatur batas maksimal slot (0-99).\n` +
                         `🔹 \`!namevoice [nama]\` - Mengubah nama room privatmu.\n` +
-                        `🔹 \`!kickvoice @user\` - Menendang user lain keluar dari room privatmu.`
+                        `🔹 \`!kickvoice @user\` - Menendang user lain keluar dari room.`
                     )
                     .setTimestamp();
 
-                // Kirim ke text-chat internal milik Voice Channel tersebut
-                await roomBaru.send({ content: `${member}`, embeds: [sapaanEmbed] });
+                await roomBaru.send({ content: `${member}`, embeds: [sapaanEmbed] }).catch(() => null);
 
             } catch (err) {
                 console.error('❌ [Voice Master Error] Gagal mengeksekusi pembuatan room:', err.message);
             }
         }
 
-        // JIKA USER KELUAR DARI ROOM PRIVAT TEMPORER (HAPUS JIKA KOSONG)
-        if (oldState.channelId && dynamicVoiceChannels.has(oldState.channelId)) {
+        // ─── 2. JIKA USER KELUAR DARI ROOM PRIVAT TEMPORER ───
+        if (oldState.channelId && globalDbCache.dynamicVoices.includes(oldState.channelId)) {
             const channelLama = oldState.guild.channels.cache.get(oldState.channelId);
+            
+            // Hapus jika room benar-benar sudah tidak ada isinya
             if (channelLama && channelLama.members.size === 0) {
                 try {
                     await channelLama.delete();
-                    dynamicVoiceChannels.delete(oldState.channelId); // Bersihkan cache memori
+                    
+                    // Hapus dari ingatan cache database
+                    globalDbCache.dynamicVoices = globalDbCache.dynamicVoices.filter(id => id !== oldState.channelId);
                     console.log(`🗑️ [Voice Master] Room privat kosong telah dibersihkan otomatis.`);
                 } catch (err) {
                     console.error('❌ [Voice Master Error] Gagal menghapus room kosong:', err.message);
@@ -138,7 +158,6 @@ async function handleVoiceMasterCommands(message, command, args, globalDbCache) 
             return message.reply('✖️ ID Voice Channel tersebut tidak ditemukan di dalam daftar pantauan bot!');
         }
 
-        // Hapus ID dari array database RAM
         globalDbCache.voiceHubs = globalDbCache.voiceHubs.filter(id => id !== inputId);
         return message.reply(`🗑️ Berhasil! Voice Hub dengan ID \`${inputId}\` telah dihapus dari daftar pantauan bot.`);
     }
@@ -167,8 +186,8 @@ async function handleVoiceMasterCommands(message, command, args, globalDbCache) 
     if (voiceMasterCommands.includes(command)) {
         const voiceChannel = message.member.voice.channel;
 
-        // Cek apakah user berada di voice channel privat buatan bot
-        if (!voiceChannel || !dynamicVoiceChannels.has(voiceChannel.id)) {
+        // Cek apakah user berada di voice channel privat buatan bot menggunakan sinkronisasi Database DB
+        if (!voiceChannel || !(globalDbCache.dynamicVoices || []).includes(voiceChannel.id)) {
             return message.reply('✖️ Kamu harus berada di dalam **Room Privat buatanmu sendiri** untuk menggunakan perintah ini!');
         }
 
@@ -225,6 +244,7 @@ async function handleVoiceMasterCommands(message, command, args, globalDbCache) 
             }
 
             try {
+                // Menendang user dari voice dengan melempar mereka ke null channel
                 await targetMember.voice.setChannel(null);
                 return message.reply(`🚨 Berhasil! <@${targetMember.id}> telah ditendang keluar dari room privat kamu.`);
             } catch (err) {
