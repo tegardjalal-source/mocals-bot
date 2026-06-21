@@ -1582,4 +1582,17 @@ app.listen(PORT_WEB, '0.0.0.0', () => {
     console.log(`🚀 [Web Server Webhook] Mendengarkan notifikasi Saweria aktif di port :${PORT_WEB}`);
 });
 
+// 👇 TARUH DI SINI: SISTEM ANTI-CRASH ───
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 [ANTI-CRASH] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('🚨 [ANTI-CRASH] Uncaught Exception:', err);
+});
+
+process.on('uncaughtExceptionMonitor', (err, origin) => {
+    console.error('🚨 [ANTI-CRASH] Uncaught Exception Monitor:', err, origin);
+});
+
 client.login(process.env.DISCORD_TOKEN);
