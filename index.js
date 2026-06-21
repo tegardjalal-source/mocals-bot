@@ -12,7 +12,7 @@ const { createCustomImage } = require('./welcomeImage');
 const { handleAntiSpam, handleAntiPhising } = require('./securityManager'); 
 const { handleGameCommands } = require('./gameManager'); 
 const { handleAIChat } = require('./aiManager'); 
-const youtubeManager = require('./youtubeManager'); // 👇 Modul YouTube yang baru
+const youtubeManager = require('./youtubeManager'); // Modul YouTube
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -95,8 +95,8 @@ client.once('ready', async () => {
 
         initVoiceMaster(client, globalDbCache);
         
-        // 👇 NYALAKAN FITUR AUTO PROMOT YOUTUBE
-        youtubeManager.startPolling(client);
+        // NYALAKAN FITUR AUTO PROMOT YOUTUBE
+        youtubeManager.startPolling(client, globalDbCache);
         
         await updateBotStatus();
         setInterval(updateBotStatus, 5 * 60 * 1000); 
@@ -161,8 +161,8 @@ if (!global.userWarnsCache) global.userWarnsCache = new Map();
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    // 👇 CEK COMMAND YOUTUBE DULU (!addchannel, !removechannel, !listchannels)
-    const isYoutubeHandled = await youtubeManager.handleCommands(message);
+    // CEK COMMAND YOUTUBE DULU (!addchannel, !removechannel, !listchannels)
+    const isYoutubeHandled = await youtubeManager.handleCommands(message, globalDbCache, saveData);
     if (isYoutubeHandled) return;
 
     const guildId = message.guild.id;
@@ -228,7 +228,7 @@ client.on('messageCreate', async (message) => {
                 { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`', inline: false },
                 { name: '🔮 Gacha Multi-Luck & Album Kartu', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!gachainfo`, `!collection`, `!charinfo`, `!topcollector`', inline: false },
                 { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Etalase toko.\n`!buycard [Kode]`, `!buybm [Kode]`', inline: false },
-                { name: '📺 Pemantau YouTube Live', value: '`!addchannel`, `!removechannel`, `!listchannels`', inline: false },
+                { name: '📺 Pemantau YouTube Live', value: '`!setchannelnotif`, `!addchannel`, `!removechannel`, `!listchannels`', inline: false },
                 { name: '💳 Sistem Donasi VIP', value: '`!donate` - Info donasi Saweria.\n`!checkvip` - Cek status masa aktif VIP milikmu.', inline: false },
                 { name: '🎨 Kustomisasi Welcome/Leave', value: '`!setwelcomebg [URL]`, `!setleavebg [URL]` (Admin Only)', inline: false }
             );
@@ -275,6 +275,19 @@ client.on('messageCreate', async (message) => {
         if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
         globalDbCache.serverSettings[guildId].bmChannelId = ch.id;
         return message.reply(`✅ Lapak Black Market diatur ke ${ch}.`);
+    }
+
+    // 👇 INI DIA COMMAND YANG KELUPAAN!
+    if (command === 'setchannelnotif') {
+        if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Khusus Administrator.');
+        const ch = message.mentions.channels.first();
+        if (!ch) return message.reply('✖️ Format: `!setchannelnotif #channel`');
+        if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+        if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+        globalDbCache.serverSettings[guildId].ytLogChannel = ch.id;
+        // Panggil saveData langsung biar aman di cloud
+        saveData(globalDbCache);
+        return message.reply(`✅ Channel notifikasi live YouTube berhasil diatur ke ${ch}. Jangan lupa set ID YouTube pakai \`!addchannel\`.`);
     }
 
     if (command === 'sethbdrole') {
@@ -431,7 +444,9 @@ client.on('messageCreate', async (message) => {
     await handleVoiceMasterCommands(message, command, args, globalDbCache);
     await handleDonationCommands(message, command, args, globalDbCache);
 
-    const triggerSaveCommands = ['createjoin', 'addvip', 'donationlogset', 'viproleset', 'setwelcomebg', 'setleavebg', 'setwelcome', 'setleave', 'bmchannelset', 'setupupdate', 'sethbdrole', 'sethbdchannel'];
+    // 👇 SETCHANNELNOTIF JUGA UDAH DITAMBAHKAN KE DAFTAR AUTO-SAVE CLOUD
+    const triggerSaveCommands = ['createjoin', 'addvip', 'donationlogset', 'viproleset', 'setwelcomebg', 'setleavebg', 'setwelcome', 'setleave', 'bmchannelset', 'setupupdate', 'sethbdrole', 'sethbdchannel', 'setchannelnotif'];
+    
     if (triggerSaveCommands.includes(command)) {
         try { await saveData(globalDbCache); console.log(`💾 [Auto-Save] Data (${command}) dicadangkan.`); } catch (err) {}
     }
