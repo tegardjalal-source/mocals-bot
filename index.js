@@ -8,9 +8,10 @@ const bodyParser = require('body-parser');
 const { jalankanGacha } = require('./gachaEngine');
 const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); 
 const { handleDonationCommands, handleSaweriaWebhook } = require('./donation'); 
-
-// 👇 BARU: Memanggil fungsi pembuat gambar kustom
 const { createCustomImage } = require('./welcomeImage'); 
+
+// 👇 BARU: Memanggil sistem keamanan dari file luar (Modularisasi)
+const { handleAntiSpam, handleAntiPhising } = require('./securityManager'); 
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -231,6 +232,7 @@ cron.schedule('0 0 * * *', async () => {
                 }
             }
 
+            // 👇 LOGIKA HBD DIPERBARUI
             if (globalDbCache.hbd) {
                 for (const userId in globalDbCache.hbd) {
                     if (globalDbCache.hbd[userId] === today) {
@@ -241,7 +243,14 @@ cron.schedule('0 0 * * *', async () => {
                                 await member.roles.add(hbdRoleId).catch(console.error);
                             }
 
-                            const channel = guild.systemChannel || guild.channels.cache.find(c => c.type === ChannelType.GuildText);
+                            // Cek channel khusus HBD dulu
+                            const targetChannelId = globalDbCache.serverSettings?.[guildId]?.hbdChannelId;
+                            
+                            // Jika ada channel HBD, pakai itu. Jika tidak ada, baru pakai system channel
+                            const channel = targetChannelId 
+                                ? (guild.channels.cache.get(targetChannelId) || await guild.channels.fetch(targetChannelId).catch(() => null)) 
+                                : (guild.systemChannel || guild.channels.cache.find(c => c.type === ChannelType.GuildText));
+                            
                             if (channel) {
                                 channel.send(`🎉 Selamat ulang tahun <@${userId}>! Semoga harimu menyenangkan! 🎂`);
                             }
@@ -249,6 +258,7 @@ cron.schedule('0 0 * * *', async () => {
                     }
                 }
             }
+
             console.log(`🔄 Meriset barang di Black Market untuk server: ${guild.name}`);
             if (!globalDbCache.blackMarketServers) globalDbCache.blackMarketServers = {};
             globalDbCache.blackMarketServers[guildId] = [];
@@ -320,71 +330,9 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
     const guildId = message.guild.id;
 
-    if (!securityDisabledGuilds.has(guildId)) {
-        if (!message.member?.permissions.has('Administrator') && !message.member?.permissions.has('ManageMessages')) {
-            const userId = message.author.id;
-            const now = Date.now();
-            
-            const LIMIT = 3;        
-            const TIME_WINDOW = 8000; 
-
-            if (!messageCounts.has(userId)) {
-                messageCounts.set(userId, []);
-            }
-
-            const timestamps = messageCounts.get(userId);
-            timestamps.push(now);
-
-            const recentMessages = timestamps.filter(ts => now - ts < TIME_WINDOW);
-            messageCounts.set(userId, recentMessages);
-
-            if (recentMessages.length > LIMIT) {
-                try {
-                    const fetchedMessages = await message.channel.messages.fetch({ limit: 50 });
-                    const messagesToDelete = fetchedMessages.filter(m => m.author.id === userId);
-
-                    if (messagesToDelete.size > 0) {
-                        await message.channel.bulkDelete(messagesToDelete, true).catch(() => null);
-                    }
-
-                    const warnExpiryTime = global.userWarnsCache.get(userId);
-                    
-                    if (!warnExpiryTime || now > warnExpiryTime) {
-                        const limaMenit = 5 * 60 * 1000; 
-                        global.userWarnsCache.set(userId, now + limaMenit); 
-
-                        const warnEmbed = new EmbedBuilder()
-                            .setColor('#ffaa00')
-                            .setTitle('⚠️ PERINGATAN ANTI-SPAM')
-                            .setDescription(`Halo <@${userId}>, kamu terdeteksi mengetik terlalu cepat! Sesi pesanmu telah dibersihkan.\n\n**Peringatan ini hanya berlaku selama 5 menit**. Jangan diulangi ya, kalau kamu tetap nekat spam dalam waktu dekat, kamu akan **ditendang (kick)** dari server! 🤫`)
-                            .setTimestamp();
-
-                        message.channel.send({ content: `<@${userId}>`, embeds: [warnEmbed] });
-                        messageCounts.delete(userId); 
-
-                    } else {
-                        if (message.member && message.member.kickable) {
-                            await message.member.kick('Spam berlebihan di dalam masa pengawasan 5 menit.');
-                            
-                            const antiSpamEmbed = new EmbedBuilder()
-                                .setColor('#ff0000')
-                                .setTitle('🚨 TINDAKAN AUTO-MODERASI')
-                                .setDescription(`**${message.author.tag}** telah ditendang dari server karena mengabaikan peringatan bot dan tetap melakukan spamming!`)
-                                .setTimestamp();
-                            
-                            message.channel.send({ embeds: [antiSpamEmbed] });
-                        }
-
-                        messageCounts.delete(userId); 
-                        global.userWarnsCache.delete(userId);
-                    }
-                    return; 
-                } catch (err) {
-                    console.error('Gagal memproses eksekusi sistem anti-spam:', err);
-                }
-            }
-        }
-    }
+    // 👇 LOGIKA KEAMANAN YANG SUDAH DIPERSINGKAT (Modular)
+    await handleAntiPhising(message);
+    await handleAntiSpam(message, messageCounts, securityDisabledGuilds);
 
     if (message.mentions.has(client.user.id) && !message.content.startsWith('!')) {
         const helpEmbed = new EmbedBuilder()
@@ -430,19 +378,19 @@ client.on('messageCreate', async (message) => {
                 { name: 'ℹ️ Hiburan & Informasi', value: '`!ping`, `!halo`, `!gabutnih`, `!rank`, `!8ball`, `!coinflip`, `!remind`, `!userinfo`, `!serverinfo`, `!status`, `!info`', inline: false },
                 { name: '💰 Ekonomi & Toko Pasar', value: '`!money`, `!work`, `!gamble`, `!leaderboard`, `!givecash`', inline: false },
                 { name: '⚔️ Duel Formasi Deck & Taruhan', value: '`!setdeck [ID_MAL]` (Pasang/copot kartu), `!deck` (Cek deck), `!duel @user` (Latihan), `!bit @user [jumlah]` (Taruhan koin), `!confirm`, `!reject`', inline: false },
-                { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`, `!sethbdrole @role` (Admin Only)', inline: false },
+                { name: '🎂 Ulang Tahun', value: '`!sethbd DD-MM`', inline: false },
                 { name: '🔮 Gacha Multi-Luck & Album Kartu', value: '`!gacha`, `!gachaluck`, `!gachasuperluck`, `!gachamegaluck`, `!gachainfo`, `!collection`, `!charinfo`, `!topcollector`', inline: false },
                 { name: '🛒 Bursa Pasar & Black Market', value: '`!sellcard [ID] [Harga]` - Jual kartu.\n`!marketlist` - Etalase toko.\n`!buycard [Kode]`, `!buybm [Kode]`', inline: false },
                 { name: '📺 Pemantau YouTube Live', value: '`!addchannel`, `!removechannel`, `!listchannels`', inline: false },
                 { name: '💳 Sistem Donasi VIP', value: '`!donate` - Info donasi Saweria.\n`!checkvip` - Cek status masa aktif VIP milikmu.', inline: false },
-                // 👇 BARU: Tambahan panduan command Welcome & Leave BG di Help
-                { name: '🎨 Kustomisasi Welcome/Leave', value: '`!setwelcomebg [URL_Gambar]`, `!setleavebg [URL_Gambar]` (Admin Only)', inline: false }
+                { name: '🎨 Kustomisasi Welcome/Leave', value: '`!setwelcomebg [URL]`, `!setleavebg [URL]` (Admin Only)', inline: false }
             );
 
         if (message.member.permissions.has('Administrator')) {
             helpEmbed.addFields({
                 name: '🛠️ Perintah Khusus Administrator (Rahasia)',
-                value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`, `!donationlogset #channel`, `!viproleset @role`, `!addvip @user [hari]`',
+                // 👇 HELP UPDATE: Menambahkan !sethbdchannel di daftar bantuan
+                value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`, `!sethbdchannel #channel`, `!donationlogset #channel`, `!viproleset @role`, `!addvip @user [hari]`',
                 inline: false
             });
             helpEmbed.setColor('#ff0000'); 
@@ -582,6 +530,29 @@ client.on('messageCreate', async (message) => {
             return message.reply("✖️ Terjadi kesalahan internal saat mencoba menyimpan konfigurasi role.");
         }
     } 
+
+    // 👇 COMMAND BARU: sethbdchannel
+    if (command === 'sethbdchannel') {
+        if (!message.member.permissions.has('Administrator')) {
+            return message.reply('✖️ Perintah ini rahasia! Hanya bisa digunakan oleh **Administrator** server.');
+        }
+        const ch = message.mentions.channels.first();
+        if (!ch) return message.reply('✖️ Format salah! Tag channel tujuannya. Contoh: `!sethbdchannel #ulang-tahun`');
+
+        try {
+            if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
+            if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
+
+            globalDbCache.serverSettings[guildId].hbdChannelId = ch.id;
+            
+            saveData(globalDbCache); 
+            
+            return message.reply(`✅ Channel perayaan ulang tahun berhasil diatur ke ${ch}.`);
+        } catch (err) {
+            console.error("Eror saat mengatur hbd channel:", err);
+            return message.reply("✖️ Terjadi kesalahan internal.");
+        }
+    }
 
     if (command === 'enablesecurity') {
         if (!message.member.permissions.has('Administrator')) {
@@ -1139,7 +1110,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`✅ Channel welcome berhasil diatur ke ${ch}`);
     }
 
-    // 👇 BARU: Command Set Welcome Background
     if (command === 'setwelcomebg') {
         if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Admin Only.');
         const url = args[0];
@@ -1167,7 +1137,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`✅ Channel leave berhasil diatur ke ${ch}`);
     }
 
-    // 👇 BARU: Command Set Leave Background
     if (command === 'setleavebg') {
         if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Admin Only.');
         const url = args[0];
@@ -1238,7 +1207,7 @@ client.on('messageCreate', async (message) => {
                 successCount++;
             }
         });
-        return message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);     
+        return message.reply(`✅ Pesan berhasil dibroadcast ke ${successCount} server!`);      
     }
 
     if (command === 'ping') return message.reply('Pong! 🏓');
@@ -1528,10 +1497,16 @@ client.on('messageCreate', async (message) => {
     }
 
     await handleVoiceMasterCommands(message, command, args, globalDbCache);
-
     await handleDonationCommands(message, command, args, globalDbCache);
 
-    if (command === 'createjoin' || command === 'addvip' || command === 'donationlogset' || command === 'viproleset' || command === 'setwelcomebg' || command === 'setleavebg') {
+    // 👇 LOGIKA AUTO-SAVE TERBARU (Mencakup sethbdchannel, setwelcome, dll)
+    const triggerSaveCommands = [
+        'createjoin', 'addvip', 'donationlogset', 'viproleset', 
+        'setwelcomebg', 'setleavebg', 'setwelcome', 'setleave', 
+        'bmchannelset', 'setchannelnotif', 'setupupdate', 'sethbdrole', 'sethbdchannel'
+    ];
+
+    if (triggerSaveCommands.includes(command)) {
         try {
             await saveData(globalDbCache);
             console.log(`💾 [Auto-Save] Perubahan data krusial (${command}) berhasil dicadangkan ke JSONBin.`);
@@ -1541,17 +1516,15 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// 👇 BARU: Modifikasi Event Member Add untuk Canvas Custom BG
 client.on('guildMemberAdd', async (member) => { 
     const serverData = globalDbCache.serverSettings?.[member.guild.id];
     const welcomeId = serverData ? serverData.welcomeId : null;
-    const bgUrl = serverData ? serverData.welcomeBgUrl : null; // Ambil URL BG dari DB
+    const bgUrl = serverData ? serverData.welcomeBgUrl : null; 
 
     if (welcomeId) {
         const ch = member.guild.channels.cache.get(welcomeId) || await member.guild.channels.fetch(welcomeId).catch(() => null);
         if (ch) {
             try {
-                // Buat canvas dan kirim sebagai attachment
                 const attachment = await createCustomImage('welcome', member, bgUrl);
                 ch.send({ 
                     content: `Welcome imoet ${member}! ✨`, 
@@ -1559,24 +1532,21 @@ client.on('guildMemberAdd', async (member) => {
                 }).catch(console.error);
             } catch (err) {
                 console.error("Gagal mengirim gambar welcome:", err);
-                // Fallback kalau error
                 ch.send(`Welcome imoet ${member}! ✨`); 
             }
         }
     }
 });
 
-// 👇 BARU: Modifikasi Event Member Remove untuk Canvas Custom BG
 client.on('guildMemberRemove', async (member) => { 
     const serverData = globalDbCache.serverSettings?.[member.guild.id];
     const leaveId = serverData ? serverData.leaveId : null;
-    const bgUrl = serverData ? serverData.leaveBgUrl : null; // Ambil URL BG dari DB
+    const bgUrl = serverData ? serverData.leaveBgUrl : null; 
 
     if (leaveId) {
         const ch = member.guild.channels.cache.get(leaveId) || await member.guild.channels.fetch(leaveId).catch(() => null);
         if (ch) {
             try {
-                // Buat canvas dan kirim sebagai attachment
                 const attachment = await createCustomImage('goodbye', member, bgUrl);
                 ch.send({ 
                     content: `Dadah ${member.user.tag}, sampai jumpa lagi! 😢`, 
@@ -1584,14 +1554,12 @@ client.on('guildMemberRemove', async (member) => {
                 }).catch(console.error);
             } catch (err) {
                 console.error("Gagal mengirim gambar goodbye:", err);
-                // Fallback kalau error
                 ch.send(`Dadah ${member.user.tag}, sampai jumpa lagi! 😢`); 
             }
         }
     }
 });
 
-// ─── 🚀 WEB SERVER WEBHOOK SAWERIA INTEGRATION (OPTIMIZED) ───
 const app = express();
 app.use(express.json()); 
 
