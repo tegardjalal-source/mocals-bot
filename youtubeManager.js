@@ -161,11 +161,44 @@ module.exports = {
                 message.reply('Belum ada channel YouTube yang dipantau oleh bot.');
                 return true;
             }
-            let replyMsg = '**📺 Daftar ID Channel YouTube yang Dipantau:**\n';
-            channels.forEach((id, i) => {
-                replyMsg += `${i + 1}. \`${id}\` (<https://www.youtube.com/channel/${id}>)\n`;
-            });
-            message.reply(replyMsg);
+            
+            // Kasih efek ngetik karena bot butuh waktu narik data dari Google
+            message.channel.sendTyping();
+            
+            let replyMsg = '**📺 Daftar Channel YouTube yang Dipantau:**\n\n';
+            
+            try {
+                // Menarik data nama channel sekaligus dari YouTube API (Sangat hemat kuota)
+                const ytResponse = await youtube.channels.list({
+                    id: channels.join(','),
+                    part: 'snippet',
+                    maxResults: 50
+                });
+
+                const ytItems = ytResponse.data.items || [];
+                const nameMap = {};
+                
+                // Memasangkan ID dengan Nama Channel aslinya
+                ytItems.forEach(item => {
+                    nameMap[item.id] = item.snippet.title;
+                });
+
+                // Merakit pesan balasan
+                channels.forEach((id, i) => {
+                    const channelName = nameMap[id] || "Nama Tidak Ditemukan";
+                    replyMsg += `**${i + 1}. ${channelName}**\n🆔 \`${id}\`\n🔗 <https://www.youtube.com/channel/${id}>\n\n`;
+                });
+                
+                message.reply(replyMsg);
+            } catch (error) {
+                console.error("🚨 [YouTube API] Gagal mengambil nama channel:", error.message);
+                
+                // Fallback (Pencegahan): Kalau API Google lagi error, tetap tampilkan ID-nya
+                channels.forEach((id, i) => {
+                    replyMsg += `**${i + 1}. Unknown Channel**\n🆔 \`${id}\`\n🔗 <https://www.youtube.com/channel/${id}>\n\n`;
+                });
+                message.reply(replyMsg + "\n*(⚠️ Gagal memuat nama channel karena gangguan API)*");
+            }
             return true;
         }
 
