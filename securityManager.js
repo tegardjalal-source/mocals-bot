@@ -1,6 +1,6 @@
 // securityManager.js
 const { EmbedBuilder } = require('discord.js');
-const Tesseract = require('tesseract.js'); // 👈 Memanggil library pembaca gambar
+const Tesseract = require('tesseract.js'); 
 
 // ==========================================
 // 1. FUNGSI ANTI-SPAM TEKS CEPAT
@@ -10,6 +10,7 @@ async function handleAntiSpam(message, messageCounts, securityDisabledGuilds) {
     const userId = message.author.id;
 
     if (securityDisabledGuilds.has(guildId)) return;
+    // Fitur spam ketik cepat tetap kebal untuk Admin, agar mereka bebas ngetik saat event/pengumuman
     if (message.member?.permissions.has('Administrator') || message.member?.permissions.has('ManageMessages')) return;
 
     const now = Date.now();
@@ -73,23 +74,40 @@ async function handleAntiSpam(message, messageCounts, securityDisabledGuilds) {
 
 
 // ==========================================
-// 2. FUNGSI EKSEKUSI HUKUMAN (HELPER)
+// 2. FUNGSI EKSEKUSI HUKUMAN PHISING
 // ==========================================
 async function executePunishment(message, reason) {
     try {
-        await message.delete().catch(() => null); // Hapus pesan berbahaya
+        // 1. Hapus pesan scam-nya tanpa ampun (berlaku untuk semua, termasuk Owner)
+        await message.delete().catch(() => null); 
         
+        // 2. Cek apakah pelakunya Admin
+        const isAdmin = message.member?.permissions.has('Administrator');
+        
+        // 3. Set durasi: 6 Jam untuk Admin (21600000 ms), 1 Jam untuk biasa (3600000 ms)
+        const timeoutDuration = isAdmin ? (6 * 60 * 60 * 1000) : (1 * 60 * 60 * 1000); 
+        
+        let actionText = isAdmin 
+            ? `🚨 **PERINGATAN DARURAT!** Akun Admin <@${message.author.id}> terindikasi diretas/mengirim link scam!` 
+            : `Pesan dari <@${message.author.id}> dihapus otomatis oleh sistem.`;
+
         const scamEmbed = new EmbedBuilder()
             .setColor('#ff0000')
             .setTitle('🛡️ ANCAMAN KEAMANAN DICEGAH')
-            .setDescription(`Pesan dari <@${message.author.id}> dihapus otomatis oleh sistem.\n**Catatan Log:** ${reason}`)
+            .setDescription(`${actionText}\n**Catatan Log:** ${reason}`)
             .setTimestamp();
         
-        message.channel.send({ embeds: [scamEmbed] });
+        await message.channel.send({ embeds: [scamEmbed] });
 
-        // Otomatis Timeout user selama 1 jam agar tidak bisa ngirim lagi
+        // 4. Eksekusi Timeout
         if (message.member && message.member.moderatable) {
-            await message.member.timeout(60 * 60 * 1000, reason);
+            await message.member.timeout(timeoutDuration, reason);
+            if (isAdmin) {
+                message.channel.send(`🔒 *Tindakan Pengamanan: Admin tersebut telah di-timeout selama 6 Jam untuk mencegah kerusakan lebih lanjut.*`);
+            }
+        } else if (isAdmin) {
+            // Jika bot gagal timeout karena yang kena hack adalah Owner atau Role Adminnya lebih tinggi dari Bot
+            message.channel.send(`⚠️ **SISTEM TERHALANG HAK AKSES:** Bot telah menghapus pesan scam-nya, tetapi **gagal** men-timeout <@${message.author.id}> karena posisinya di atas bot (Server Owner / Higher Role). Tolong admin lain segera cabut wewenangnya!`);
         }
     } catch (err) {
         console.error("Gagal mengeksekusi penghapusan phising:", err);
@@ -101,9 +119,9 @@ async function executePunishment(message, reason) {
 // 3. FUNGSI ANTI-PHISING & OCR GAMBAR
 // ==========================================
 async function handleAntiPhising(message) {
-    if (message.member?.permissions.has('Administrator')) return;
+    // ❌ BARIS INI DIHAPUS: if (message.member?.permissions.has('Administrator')) return;
+    // Sekarang Admin TIDAK KEBAL dari scan link/gambar penipuan!
 
-    // Kata kunci penipuan yang sering dipakai hacker
     const scamKeywords = [
         'discord-nitro-free', 'freediscordnitro', 'steam-free-gift', 'discord.xyz', 
         'hesobia.com', 'hesobia', 'claim your reward', 'withdraw bonus', 
@@ -123,7 +141,6 @@ async function handleAntiPhising(message) {
     const isSusImagePing = (message.mentions.users.size > 0) && (message.attachments.size >= 1) && (textWithoutPings.length === 0);
     
     if (isSusImagePing && message.mentions.users.size >= 3) {
-        // Jika nge-ping 3 orang atau lebih DAN cuma ngirim gambar, langsung sikat tanpa ampun
         return executePunishment(message, 'Terdeteksi Spam Pola Hacker (Tag Massal + Gambar).');
     }
 
@@ -134,16 +151,13 @@ async function handleAntiPhising(message) {
 
     // --- D. CEK TULISAN DI DALAM GAMBAR (OCR TESSERACT) ---
     if (message.attachments.size > 0) {
-        // Saring attachment agar bot cuma mengecek file berbentuk gambar
         const imageAttachments = message.attachments.filter(att => att.contentType && att.contentType.startsWith('image/'));
         
         for (const [id, attachment] of imageAttachments) {
             try {
-                // Tesseract akan membaca gambar dan mengeluarkan tulisan di dalamnya
                 const { data: { text } } = await Tesseract.recognize(attachment.url, 'eng');
                 const imageText = text.toLowerCase();
 
-                // Cek apakah ada kata kunci scam di dalam gambar tersebut
                 const isImageScam = scamKeywords.some(keyword => imageText.includes(keyword));
 
                 if (isImageScam) {
@@ -156,5 +170,4 @@ async function handleAntiPhising(message) {
     }
 }
 
-// Ekspor fungsi agar bisa dipakai di index.js
 module.exports = { handleAntiSpam, handleAntiPhising };
