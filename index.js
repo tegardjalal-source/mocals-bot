@@ -9,9 +9,10 @@ const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster');
 const { handleDonationCommands, handleSaweriaWebhook } = require('./donation'); 
 const { createCustomImage } = require('./welcomeImage'); 
 const { handleAntiSpam, handleAntiPhising } = require('./securityManager'); 
-
-// 👇 BARU: Mengambil logika Gacha & Ekonomi dari Command Handler
 const { handleGameCommands } = require('./gameManager'); 
+
+// 👇 BARU: Mengambil logika AI Gemini dari aiManager.js
+const { handleAIChat } = require('./aiManager'); 
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -154,7 +155,6 @@ client.once('ready', async () => {
         await updateBotStatus();
         setInterval(updateBotStatus, 5 * 60 * 1000); 
 
-        // 👇 FIX LIMIT JSONBIN: Auto-save diatur ke 1 Jam (3600000 ms) agar sangat irit limit tapi tetap aman (720 request/bulan).
         setInterval(async () => {
             await saveData(globalDbCache);
         }, 3600000);
@@ -217,11 +217,10 @@ client.on('messageCreate', async (message) => {
     await handleAntiPhising(message);
     await handleAntiSpam(message, messageCounts, securityDisabledGuilds);
 
+    // 👇 SISTEM AI GEMINI TERBARU: Akan menyala kalau bot di-mention
     if (message.mentions.has(client.user.id) && !message.content.startsWith('!')) {
-        const helpEmbed = new EmbedBuilder().setColor(0x00FF00).setTitle('📚 Pusat Bantuan Mocals Chan').setDescription(
-                "Haloo ada yang bisa mocals bantu?? kalo ada, kamu bisa melihat list command berikut and apa yang bisa mocals chan bantu:\n\n`!help` - Menampilkan semua command\n`!status` - Cek status bot\n`!info` - Informasi lebih lanjut\n`!gachainfo` - guide untuk market dan gacha waifu/husbando kalian! ✨"
-            ).setFooter({ text: 'Gunakan perintah dengan bijak ya! ✨' });
-        return message.reply({ embeds: [helpEmbed] }); 
+        await handleAIChat(message);
+        return; 
     }
 
     const isCommand = message.content.startsWith('!');
@@ -244,8 +243,6 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // 👇 SISTEM COOLDOWN COMMAND BARU 👇
-    // Waktu tunggu dalam ms: Gamble 5 detik, gacha 3 detik, sellcard 4 detik, bit judi 5 detik
     const cooldownTime = { 'gamble': 5000, 'gacha': 3000, 'gachaluck': 3000, 'gachasuperluck': 3000, 'gachamegaluck': 3000, 'sellcard': 4000, 'bit': 5000 };
     
     if (cooldownTime[command]) {
@@ -261,19 +258,14 @@ client.on('messageCreate', async (message) => {
         setTimeout(() => global.commandCooldowns.delete(key), cooldownTime[command]);
     }
 
-    // 👇 MENGIRIM COMMAND GAME KE FILE GAMEMANAGER 👇
     try {
         const isGameHandled = await handleGameCommands(message, command, args, globalDbCache);
-        if (isGameHandled) return; // Jika command diproses oleh gameManager, hentikan eksekusi di sini.
+        if (isGameHandled) return; 
     } catch (err) {
         console.error("GameHandler Error:", err);
         return message.reply("✖️ Terjadi kesalahan saat memproses command permainan.");
     }
 
-
-    // ==========================================
-    // DAFTAR COMMAND UTILITY / ADMIN BAWAAN SERVER
-    // ==========================================
     if (command === 'help') {
         const helpEmbed = new EmbedBuilder().setColor(0x00FF00).setTitle('📚 Pusat Bantuan Mocals Chan').setDescription('Halo! Ini adalah daftar perintah lengkap yang bisa kamu gunakan di server:')
             .addFields(
