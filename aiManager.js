@@ -2,10 +2,10 @@
 const axios = require('axios');
 
 async function handleAIChat(message) {
-    // 1. Bersihkan tag mention dari pesan
+    // 1. Bersihkan tag mention
     let userInput = message.content.replace(/<@!?\d+>/g, '').trim();
 
-    // 2. Kalau cuma ngetag tanpa ngetik apa-apa
+    // 2. Cegah error jika pesan kosong
     if (!userInput) {
         return message.reply("Iyaaa? Kenapa manggil-manggil? Ada yang bisa Mocals bantu? ✨");
     }
@@ -13,30 +13,40 @@ async function handleAIChat(message) {
     try {
         message.channel.sendTyping();
         
-        // 3. Prompt Sistem Persona
-        const promptSystem = "Kamu adalah Mocals Chan, asisten virtual tsundere, imut, dan ceria di server Discord Mocals. Jawablah pesan berikut dengan bahasa gaul, santai, dan singkat:\n\nUser: " + userInput;
-        
-        // 👇 GANTI BAGIAN URL INI (Gunakan gemini-1.0-pro) 👇
+        // 3. Tembak API Groq menggunakan model Llama-3
         const response = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            'https://api.groq.com/openai/v1/chat/completions',
             {
-                contents: [{ parts: [{ text: promptSystem }] }]
+                model: "llama3-8b-8192", // Model super cepat dan ringan
+                messages: [
+                    { 
+                        role: "system", 
+                        content: "Kamu adalah Mocals Chan, asisten virtual tsundere, imut, dan ceria di server Discord Mocals. Jawablah pesan berikut dengan bahasa gaul, santai, dan asik." 
+                    },
+                    { 
+                        role: "user", 
+                        content: userInput 
+                    }
+                ],
+                temperature: 0.7,
+                max_tokens: 500
             },
             { 
-                headers: { 'Content-Type': 'application/json' } 
+                headers: { 
+                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                    'Content-Type': 'application/json' 
+                } 
             }
         );
 
-        // 5. Ambil jawaban dari Google
-        const aiText = response.data.candidates[0].content.parts[0].text;
-        
+        // 4. Ambil dan kirim balasan
+        const aiText = response.data.choices[0].message.content;
         message.reply(aiText);
         
     } catch (err) {
-        // Tangkap error langsung dari mesin Google
         const errorDetail = err.response ? JSON.stringify(err.response.data) : err.message;
-        console.error("🚨 [RAW API ERROR]:", errorDetail);
-        message.reply("Waduh, koneksi ke Google lagi ngadat nih mang! 😵‍💫");
+        console.error("🚨 [GROQ API ERROR]:", errorDetail);
+        message.reply("Waduh, otak baruku lagi loading nih mang! 😵‍💫");
     }
 }
 
