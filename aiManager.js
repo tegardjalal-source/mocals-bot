@@ -13,11 +13,12 @@ async function handleAIChat(message) {
     try {
         message.channel.sendTyping();
         
-        // 3. Tembak API Groq menggunakan model Llama-3
+        // 3. Tembak API Groq menggunakan model Llama-3.1 TERBARU
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',
             {
-                model: "llama3-8b-8192", // Model super cepat dan ringan
+                // 👇 INI YANG DIGANTI: Menggunakan model Llama 3.1 terbaru yang aktif
+                model: "llama-3.1-8b-instant", 
                 messages: [
                     { 
                         role: "system", 
