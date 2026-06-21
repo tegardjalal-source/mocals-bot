@@ -1,47 +1,42 @@
 // aiManager.js
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-
-// Inisialisasi API
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-const chatHistories = new Map();
+const axios = require('axios');
 
 async function handleAIChat(message) {
-    const userId = message.author.id;
-    
-    // 1. Bersihkan tag mention bot dari pesan biar AI nggak bingung baca angka ID
+    // 1. Bersihkan tag mention dari pesan
     let userInput = message.content.replace(/<@!?\d+>/g, '').trim();
 
-    // 2. Cegah error jika user cuma ngetag doang tanpa teks
+    // 2. Kalau cuma ngetag tanpa ngetik apa-apa
     if (!userInput) {
         return message.reply("Iyaaa? Kenapa manggil-manggil? Ada yang bisa Mocals bantu? ✨");
     }
-
-    if (!chatHistories.has(userId)) {
-        chatHistories.set(userId, model.startChat({
-            history: [{
-                role: "user",
-                parts: [{ text: "Halo, namamu adalah Mocals Chan. Kamu adalah asisten virtual di server Discord Mocals. Jawab dengan gaya bahasa gaul, ceria, santai, dan sedikit tsundere." }],
-            }, {
-                role: "model",
-                parts: [{ text: "Halo! Aku Mocals Chan, siap menemanimu! Ada yang bisa kubantu hari ini? ✨" }],
-            }],
-        }));
-    }
-
-    const chat = chatHistories.get(userId);
     
     try {
         message.channel.sendTyping();
-        const result = await chat.sendMessage(userInput);
-        const response = await result.response;
         
-        message.reply(response.text());
+        // 3. Prompt Sistem Persona
+        const promptSystem = "Kamu adalah Mocals Chan, asisten virtual tsundere, imut, dan ceria di server Discord Mocals. Jawablah pesan berikut dengan bahasa gaul, santai, dan singkat:\n\nUser: " + userInput;
+        
+        // 4. Tembak langsung API Google secara raw (Bypass Library)
+        const response = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            {
+                contents: [{ parts: [{ text: promptSystem }] }]
+            },
+            { 
+                headers: { 'Content-Type': 'application/json' } 
+            }
+        );
+
+        // 5. Ambil jawaban dari Google
+        const aiText = response.data.candidates[0].content.parts[0].text;
+        
+        message.reply(aiText);
+        
     } catch (err) {
-        // Log diubah biar pesan merah di Railway lebih jelas terbaca
-        console.error("🚨 [DEBUG AI ERROR]:", err.message || err);
-        message.reply("Waduh, otakku lagi loading nih, coba lagi sebentar ya! 😵‍💫");
+        // Tangkap error langsung dari mesin Google
+        const errorDetail = err.response ? JSON.stringify(err.response.data) : err.message;
+        console.error("🚨 [RAW API ERROR]:", errorDetail);
+        message.reply("Waduh, koneksi ke Google lagi ngadat nih mang! 😵‍💫");
     }
 }
 
