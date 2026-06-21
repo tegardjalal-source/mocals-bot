@@ -16,9 +16,9 @@ async function handleAIChat(message) {
         // 3. Prompt Sistem Persona
         const promptSystem = "Kamu adalah Mocals Chan, asisten virtual tsundere, imut, dan ceria di server Discord Mocals. Jawablah pesan berikut dengan bahasa gaul, santai, dan singkat:\n\nUser: " + userInput;
         
-        // 4. Tembak langsung API Google secara raw (Bypass Library)
+        // 👇 GANTI BAGIAN URL INI (Gunakan gemini-1.0-pro) 👇
         const response = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
             {
                 contents: [{ parts: [{ text: promptSystem }] }]
             },
