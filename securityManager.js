@@ -1,7 +1,10 @@
 // securityManager.js
 const { EmbedBuilder } = require('discord.js');
+const Tesseract = require('tesseract.js'); // 👈 Memanggil library pembaca gambar
 
-// 1. Fungsi Anti-Spam
+// ==========================================
+// 1. FUNGSI ANTI-SPAM TEKS CEPAT
+// ==========================================
 async function handleAntiSpam(message, messageCounts, securityDisabledGuilds) {
     const guildId = message.guild.id;
     const userId = message.author.id;
@@ -54,7 +57,7 @@ async function handleAntiSpam(message, messageCounts, securityDisabledGuilds) {
                     const antiSpamEmbed = new EmbedBuilder()
                         .setColor('#ff0000')
                         .setTitle('🚨 TINDAKAN AUTO-MODERASI')
-                        .setDescription(`**${message.author.tag}** telah ditendang dari server karena tetap melakukan spamming!`)
+                        .setDescription(`**${message.author.tag}** telah ditendang dari server karena mengabaikan peringatan bot dan tetap melakukan spamming!`)
                         .setTimestamp();
                     
                     message.channel.send({ embeds: [antiSpamEmbed] });
@@ -68,57 +71,90 @@ async function handleAntiSpam(message, messageCounts, securityDisabledGuilds) {
     }
 }
 
-// 2. Fungsi Anti-Phising & Anti-Scam Lanjutan
-async function handleAntiPhising(message) {
-    if (message.member?.permissions.has('Administrator')) return; // Abaikan jika admin
 
-    // --- A. CEK KEYWORD TEKS ---
+// ==========================================
+// 2. FUNGSI EKSEKUSI HUKUMAN (HELPER)
+// ==========================================
+async function executePunishment(message, reason) {
+    try {
+        await message.delete().catch(() => null); // Hapus pesan berbahaya
+        
+        const scamEmbed = new EmbedBuilder()
+            .setColor('#ff0000')
+            .setTitle('🛡️ ANCAMAN KEAMANAN DICEGAH')
+            .setDescription(`Pesan dari <@${message.author.id}> dihapus otomatis oleh sistem.\n**Catatan Log:** ${reason}`)
+            .setTimestamp();
+        
+        message.channel.send({ embeds: [scamEmbed] });
+
+        // Otomatis Timeout user selama 1 jam agar tidak bisa ngirim lagi
+        if (message.member && message.member.moderatable) {
+            await message.member.timeout(60 * 60 * 1000, reason);
+        }
+    } catch (err) {
+        console.error("Gagal mengeksekusi penghapusan phising:", err);
+    }
+}
+
+
+// ==========================================
+// 3. FUNGSI ANTI-PHISING & OCR GAMBAR
+// ==========================================
+async function handleAntiPhising(message) {
+    if (message.member?.permissions.has('Administrator')) return;
+
+    // Kata kunci penipuan yang sering dipakai hacker
     const scamKeywords = [
         'discord-nitro-free', 'freediscordnitro', 'steam-free-gift', 'discord.xyz', 
-        'free crypto', 'crypto casino', 'hesobia.com', 'hesobia', 
-        'claim your reward', 'withdraw bonus', 'vyro project', 'beast games'
+        'hesobia.com', 'hesobia', 'claim your reward', 'withdraw bonus', 
+        'vyro project', 'beast games crypto'
     ];
+
+    // --- A. CEK TEKS DI CHAT ---
     const content = message.content.toLowerCase();
     const isTextScam = scamKeywords.some(keyword => content.includes(keyword));
 
-    // --- B. CEK POLA HACKER (Kasus Gambar Crypto) ---
-    // Hacker sering mengirim: [Ping User] + [Banyak Gambar] + [Tanpa teks asli]
-    // Kita hapus semua mention dari teks untuk mengecek apakah ada teks sisa
+    if (isTextScam) {
+        return executePunishment(message, 'Terdeteksi mengirim link Scam/Phising di teks.');
+    }
+
+    // --- B. CEK POLA HACKER (Cuma Ping + Gambar, tanpa ngomong apa-apa) ---
     const textWithoutPings = message.content.replace(/<@!?\d+>/g, '').trim();
+    const isSusImagePing = (message.mentions.users.size > 0) && (message.attachments.size >= 1) && (textWithoutPings.length === 0);
     
-    // Jika ada yang di-tag AND gambarnya 2 atau lebih AND gak ada tulisan lain sama sekali
-    const isSusImagePing = (message.mentions.users.size > 0) && (message.attachments.size >= 2) && (textWithoutPings.length === 0);
+    if (isSusImagePing && message.mentions.users.size >= 3) {
+        // Jika nge-ping 3 orang atau lebih DAN cuma ngirim gambar, langsung sikat tanpa ampun
+        return executePunishment(message, 'Terdeteksi Spam Pola Hacker (Tag Massal + Gambar).');
+    }
 
     // --- C. CEK MASS MENTION ---
-    // Memblokir jika nge-tag lebih dari 4 orang sekaligus dalam 1 chat
-    const isMassMention = message.mentions.users.size > 4;
+    if (message.mentions.users.size > 4) {
+        return executePunishment(message, 'Terdeteksi melakukan Mass Mention (Spam Tag).');
+    }
 
-    // --- EKSEKUSI PEMBLOKIRAN ---
-    if (isTextScam || isSusImagePing || isMassMention) {
-        try {
-            await message.delete(); // Hapus pesan langsung
-            
-            let reason = 'Terdeteksi mengirim link Scam/Phising berbahaya.';
-            if (isSusImagePing) reason = 'Terdeteksi mengirim spam gambar berbahaya (Pola Hacker: Ping + Gambar).';
-            if (isMassMention) reason = 'Terdeteksi melakukan Mass Mention (Spam Tag).';
+    // --- D. CEK TULISAN DI DALAM GAMBAR (OCR TESSERACT) ---
+    if (message.attachments.size > 0) {
+        // Saring attachment agar bot cuma mengecek file berbentuk gambar
+        const imageAttachments = message.attachments.filter(att => att.contentType && att.contentType.startsWith('image/'));
+        
+        for (const [id, attachment] of imageAttachments) {
+            try {
+                // Tesseract akan membaca gambar dan mengeluarkan tulisan di dalamnya
+                const { data: { text } } = await Tesseract.recognize(attachment.url, 'eng');
+                const imageText = text.toLowerCase();
 
-            const scamEmbed = new EmbedBuilder()
-                .setColor('#ff0000')
-                .setTitle('🛡️ ANCAMAN KEAMANAN DICEGAH')
-                .setDescription(`Pesan dari <@${message.author.id}> dihapus otomatis oleh sistem.\n**Catatan Log:** ${reason}`)
-                .setTimestamp();
-            
-            message.channel.send({ embeds: [scamEmbed] });
+                // Cek apakah ada kata kunci scam di dalam gambar tersebut
+                const isImageScam = scamKeywords.some(keyword => imageText.includes(keyword));
 
-            // Otomatis Timeout user selama 1 jam agar tidak bisa ngirim lagi
-            if (message.member.moderatable) {
-                await message.member.timeout(60 * 60 * 1000, reason);
+                if (isImageScam) {
+                    return executePunishment(message, 'Terdeteksi menyembunyikan kata kunci Scam/Phising di dalam Gambar (OCR).');
+                }
+            } catch (error) {
+                console.error("Gagal memindai gambar dengan OCR:", error.message);
             }
-        } catch (err) {
-            console.error("Gagal mengeksekusi penghapusan phising:", err);
         }
     }
 }
 
-// Ekspor fungsi
+// Ekspor fungsi agar bisa dipakai di index.js
 module.exports = { handleAntiSpam, handleAntiPhising };
