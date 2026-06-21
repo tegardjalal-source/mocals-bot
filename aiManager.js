@@ -1,25 +1,28 @@
 // aiManager.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Inisialisasi API dengan Key dari environment variable
+// Inisialisasi API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Menggunakan model "gemini-pro" yang kompatibel secara luas
 const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-// Memori untuk menyimpan histori chat per user
 const chatHistories = new Map();
 
 async function handleAIChat(message) {
     const userId = message.author.id;
-    const userInput = message.content;
+    
+    // 1. Bersihkan tag mention bot dari pesan biar AI nggak bingung baca angka ID
+    let userInput = message.content.replace(/<@!?\d+>/g, '').trim();
 
-    // Ambil histori user, atau buat baru kalau belum ada
+    // 2. Cegah error jika user cuma ngetag doang tanpa teks
+    if (!userInput) {
+        return message.reply("Iyaaa? Kenapa manggil-manggil? Ada yang bisa Mocals bantu? ✨");
+    }
+
     if (!chatHistories.has(userId)) {
         chatHistories.set(userId, model.startChat({
             history: [{
                 role: "user",
-                parts: [{ text: "Halo, kamu adalah Mocals Chan, asisten yang ceria, suka anime, dan sedikit tsundere. Kamu menemani member di server Discord." }],
+                parts: [{ text: "Halo, namamu adalah Mocals Chan. Kamu adalah asisten virtual di server Discord Mocals. Jawab dengan gaya bahasa gaul, ceria, santai, dan sedikit tsundere." }],
             }, {
                 role: "model",
                 parts: [{ text: "Halo! Aku Mocals Chan, siap menemanimu! Ada yang bisa kubantu hari ini? ✨" }],
@@ -30,15 +33,14 @@ async function handleAIChat(message) {
     const chat = chatHistories.get(userId);
     
     try {
-        message.channel.sendTyping(); // Memberi kesan bot sedang mengetik
+        message.channel.sendTyping();
         const result = await chat.sendMessage(userInput);
         const response = await result.response;
-        const text = response.text();
         
-        message.reply(text);
+        message.reply(response.text());
     } catch (err) {
-        // Menampilkan detail error di log untuk mempermudah diagnosa
-        console.error("DEBUG ERROR GEMINI:", JSON.stringify(err, null, 2));
+        // Log diubah biar pesan merah di Railway lebih jelas terbaca
+        console.error("🚨 [DEBUG AI ERROR]:", err.message || err);
         message.reply("Waduh, otakku lagi loading nih, coba lagi sebentar ya! 😵‍💫");
     }
 }
