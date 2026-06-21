@@ -2,17 +2,17 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ChannelType } = require('discord.js');
 const axios = require('axios');
 const cron = require('node-cron');
-const { google } = require('googleapis');
 const express = require('express'); 
 const bodyParser = require('body-parser'); 
+
+// --- MODULES ---
 const { initVoiceMaster, handleVoiceMasterCommands } = require('./voiceMaster'); 
 const { handleDonationCommands, handleSaweriaWebhook } = require('./donation'); 
 const { createCustomImage } = require('./welcomeImage'); 
 const { handleAntiSpam, handleAntiPhising } = require('./securityManager'); 
 const { handleGameCommands } = require('./gameManager'); 
-
-// 👇 BARU: Mengambil logika AI Gemini dari aiManager.js
 const { handleAIChat } = require('./aiManager'); 
+const youtubeManager = require('./youtubeManager'); // 👇 Modul YouTube yang baru
 
 const BIN_ID = '6a2f39cdda38895dfec0a8ab'; 
 const MASTER_KEY = process.env.JSONBIN_KEY;
@@ -57,65 +57,9 @@ const client = new Client({
     ]
 });
 
-const notifiedVideosCache = new Set();
 const messageCounts = new Map();
 const securityDisabledGuilds = new Set();
 let globalDbCache = {};
-
-const youtube = google.youtube({
-    version: 'v3',
-    auth: process.env.YOUTUBE_API_KEY
-});
-
-function convertChannelIdToUploadsPlaylistId(channelId) {
-    if (channelId.startsWith('UC')) return 'UU' + channelId.substring(2);
-    return channelId;
-}
-
-async function checkYouTubeLiveStreams(discordClient) {
-    console.log(`[${new Date().toLocaleString()}] Memulai pengecekan berkala live stream YouTube...`);
-    try {
-        const channels = globalDbCache.ytChannels || [];
-        if (channels.length === 0) return;
-
-        for (const channelId of channels) {
-            try {
-                const playlistId = convertChannelIdToUploadsPlaylistId(channelId);
-                const playlistResponse = await youtube.playlistItems.list({ playlistId: playlistId, part: 'snippet', maxResults: 1 });
-                const items = playlistResponse.data.items;
-                if (!items || items.length === 0) continue;
-
-                const latestPlaylistItem = items[0];
-                const videoId = latestPlaylistItem.snippet.resourceId.videoId;
-                const channelName = latestPlaylistItem.snippet.channelTitle;
-                const title = latestPlaylistItem.snippet.title;
-
-                if (notifiedVideosCache.has(videoId)) continue;
-
-                const videoResponse = await youtube.videos.list({ id: videoId, part: 'snippet' });
-                const videoItems = videoResponse.data.items;
-                if (!videoItems || videoItems.length === 0) continue;
-
-                const liveBroadcastContent = videoItems[0].snippet.liveBroadcastContent;
-
-                if (liveBroadcastContent === 'live') {
-                    console.log(`🚨 [Live Terdeteksi] ${channelName} sedang LIVE!`);
-                    notifiedVideosCache.add(videoId);
-
-                    for (const guildId in globalDbCache.serverSettings) {
-                        const logChannelId = globalDbCache.serverSettings[guildId].ytLogChannel;
-                        if (logChannelId) {
-                            const channel = discordClient.channels.cache.get(logChannelId) || await discordClient.channels.fetch(logChannelId).catch(() => null);
-                            if (channel) {
-                                channel.send(`@everyone 🚨 **Ada yang lagi live nihh, jangan lupa mampir yaa...**\n🎥 **${title}**\n🔗 https://www.youtube.com/watch?v=${videoId}`);
-                            }
-                        }
-                    }
-                }
-            } catch (err) { console.error(`[YouTube Error] Gagal memproses channel ID ${channelId}:`, err.message); }
-        }
-    } catch (err) { console.error('[YouTube Error] Gagal menjalankan rutinitas pengecekan live stream:', err.message); }
-}
 
 async function updateBotStatus() {
     try {
@@ -136,6 +80,7 @@ async function sendUpdateLog(guild, content) {
     if (channel) channel.send({ embeds: [new EmbedBuilder().setColor(0x00FF00).setTitle('🚀 Update Fitur Bot').setDescription(content).setTimestamp()] });
 }
 
+// ─── EVENT READY ───
 client.once('ready', async () => {
     try {
         console.log(`${client.user.tag} sudah siap beraksi!`);
@@ -149,9 +94,10 @@ client.once('ready', async () => {
         }
 
         initVoiceMaster(client, globalDbCache);
-        await checkYouTubeLiveStreams(client);
         
-        setInterval(async () => await checkYouTubeLiveStreams(client), 300000);
+        // 👇 NYALAKAN FITUR AUTO PROMOT YOUTUBE
+        youtubeManager.startPolling(client);
+        
         await updateBotStatus();
         setInterval(updateBotStatus, 5 * 60 * 1000); 
 
@@ -164,6 +110,7 @@ client.once('ready', async () => {
     }
 });
 
+// ─── CRON JOB (00:00) ───
 cron.schedule('0 0 * * *', async () => {
     console.log("🔄 Jam 00:00: Mengeksekusi rutinitas harian di semua server...");
     const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' }).replace(/\//g, '-'); 
@@ -210,14 +157,20 @@ cron.schedule('0 0 * * *', async () => {
 
 if (!global.userWarnsCache) global.userWarnsCache = new Map();
 
+// ─── EVENT MESSAGE CREATE ───
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
+
+    // 👇 CEK COMMAND YOUTUBE DULU (!addchannel, !removechannel, !listchannels)
+    const isYoutubeHandled = await youtubeManager.handleCommands(message);
+    if (isYoutubeHandled) return;
+
     const guildId = message.guild.id;
 
     await handleAntiPhising(message);
     await handleAntiSpam(message, messageCounts, securityDisabledGuilds);
 
-    // 👇 SISTEM AI GEMINI TERBARU: Akan menyala kalau bot di-mention
+    // AI GEMINI MOCALS CHAN
     if (message.mentions.has(client.user.id) && !message.content.startsWith('!')) {
         await handleAIChat(message);
         return; 
@@ -283,7 +236,7 @@ client.on('messageCreate', async (message) => {
         if (message.member.permissions.has('Administrator')) {
             helpEmbed.addFields({
                 name: '🛠️ Perintah Khusus Administrator (Rahasia)',
-                value: '`!bmchannelset`, `!testbm`, `!setchannelnotif`, `!testyt`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`, `!sethbdchannel #channel`, `!donationlogset #channel`, `!viproleset @role`, `!addvip @user [hari]`',
+                value: '`!bmchannelset`, `!testbm`, `!setwelcome`, `!setleave`, `!testwelcome`, `!testleave`, `!setupupdate`, `!postupdate`, `!mocalschanbc`, `!enablesecurity`, `!disablesecurity`, `!sethbdrole @role`, `!sethbdchannel #channel`, `!donationlogset #channel`, `!viproleset @role`, `!addvip @user [hari]`',
                 inline: false
             });
             helpEmbed.setColor('#ff0000'); 
@@ -313,6 +266,7 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [infoEmbed] });
     }
 
+    // GENERAL COMMANDS
     if (command === 'bmchannelset') {
         if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Khusus Administrator.');
         const ch = message.mentions.channels.first();
@@ -360,45 +314,6 @@ client.on('messageCreate', async (message) => {
         globalDbCache.serverSettings[guildId].securityDisabled = true;
         securityDisabledGuilds.add(guildId); 
         return message.reply('⚠️ **Sistem Keamanan Dimatikan!** Fitur Anti-Spam telah dinonaktifkan (Anti-Scam tetap nyala).');
-    }
-
-    if (command === 'setchannelnotif') {
-        if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Khusus Administrator.');
-        const ch = message.mentions.channels.first();
-        if (!ch) return message.reply('Tag channel-nya!');
-        if (!globalDbCache.serverSettings) globalDbCache.serverSettings = {};
-        if (!globalDbCache.serverSettings[guildId]) globalDbCache.serverSettings[guildId] = {};
-        globalDbCache.serverSettings[guildId].ytLogChannel = ch.id;
-        return message.reply(`✅ Channel notif live diatur ke ${ch}`);
-    }
-
-    if (command === 'addchannel') {
-        const id = args[0];
-        if (!id) return message.reply('Masukkan ID channel YT!');
-        if (!globalDbCache.ytChannels) globalDbCache.ytChannels = [];
-        if (globalDbCache.ytChannels.includes(id)) return message.reply('Channel sudah ada!');
-        globalDbCache.ytChannels.push(id);
-        return message.reply(`✅ Channel ${id} ditambahkan!`);
-    }
-
-    if (command === 'listchannels') {
-        const channels = globalDbCache.ytChannels || [];
-        if (channels.length === 0) return message.reply('Belum ada channel YT.');
-        return message.reply(`📺 **Daftar Channel Dipantau (${channels.length})**`);
-    }
-
-    if (command === 'testyt') {
-        if (!message.member.permissions.has('Administrator')) return message.reply('✖️ Khusus Administrator.');
-        message.reply('🔄 Memulai simulasi pengecekan YouTube...');
-        await checkYouTubeLiveStreams(client);
-        return message.channel.send('✅ Pengecekan manual selesai.');
-    }
-
-    if (command === 'removechannel') {
-        const id = args[0];
-        if (!globalDbCache.ytChannels) return message.reply('List kosong!');
-        globalDbCache.ytChannels = globalDbCache.ytChannels.filter(c => c !== id);
-        return message.reply(`✅ Channel dihapus.`);
     }
 
     if (command === 'setwelcome' || command === 'setleave') {
@@ -516,12 +431,13 @@ client.on('messageCreate', async (message) => {
     await handleVoiceMasterCommands(message, command, args, globalDbCache);
     await handleDonationCommands(message, command, args, globalDbCache);
 
-    const triggerSaveCommands = ['createjoin', 'addvip', 'donationlogset', 'viproleset', 'setwelcomebg', 'setleavebg', 'setwelcome', 'setleave', 'bmchannelset', 'setchannelnotif', 'setupupdate', 'sethbdrole', 'sethbdchannel'];
+    const triggerSaveCommands = ['createjoin', 'addvip', 'donationlogset', 'viproleset', 'setwelcomebg', 'setleavebg', 'setwelcome', 'setleave', 'bmchannelset', 'setupupdate', 'sethbdrole', 'sethbdchannel'];
     if (triggerSaveCommands.includes(command)) {
         try { await saveData(globalDbCache); console.log(`💾 [Auto-Save] Data (${command}) dicadangkan.`); } catch (err) {}
     }
 });
 
+// ─── EVENT WELCOME & LEAVE ───
 client.on('guildMemberAdd', async (member) => { 
     const s = globalDbCache.serverSettings?.[member.guild.id];
     if (s?.welcomeId) {
